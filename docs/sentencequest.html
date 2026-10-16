@@ -7,6 +7,24 @@
   <title>SentenceQuest — by 103 Software Solutions LLC</title>
   <link rel="icon" href="sentencequest.svg" type="image/svg+xml">
   <link rel="stylesheet" href="theme.css">
+
+  <style>
+    /* Game-feel kit: Explorer buddy + combo meter (shared with FlipMatch). */
+    .buddy { display: flex; align-items: flex-end; gap: .55rem; margin: .35rem 0 .15rem; }
+    .buddy img { height: 92px; width: auto; filter: drop-shadow(0 4px 6px rgba(0,0,0,.35)); animation: buddyBob 2.6s ease-in-out infinite; }
+    .buddy.cheer img { animation: buddyJump .55s ease; }
+    .buddy.oops img { animation: buddyNudge .4s ease; }
+    @keyframes buddyBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @keyframes buddyJump { 30% { transform: translateY(-16px) rotate(-3deg); } 65% { transform: translateY(0); } }
+    @keyframes buddyNudge { 25% { transform: translateX(-5px) rotate(-2deg); } 75% { transform: translateX(5px) rotate(2deg); } }
+    .bubble { background: #fff; color: #17341f; border-radius: 14px; padding: .45rem .7rem; font-weight: 700; line-height: 1.25; box-shadow: 0 3px 10px rgba(0,0,0,.25); position: relative; max-width: 78%; }
+    .bubble:after { content: ""; position: absolute; left: -7px; bottom: 14px; border: 8px solid transparent; border-right-color: #fff; border-left: 0; }
+    .combo { display: flex; align-items: center; gap: .5rem; margin: .3rem 0 .1rem; }
+    .combo > span { font-weight: 900; color: #ffd23f; text-shadow: 0 2px 0 rgba(0,0,0,.4); letter-spacing: .03em; white-space: nowrap; }
+    .combo-track { flex: 1; height: 10px; background: rgba(255,255,255,.18); border-radius: 99px; overflow: hidden; }
+    .combo-fill { height: 100%; width: 0; background: linear-gradient(90deg, #ffd23f, #ff7b00, #ff3d00); transition: width .3s ease; }
+    @media (prefers-reduced-motion: reduce) { .buddy img, .buddy.cheer img, .buddy.oops img { animation: none; } }
+  </style>
 </head>
 <body>
   <div class="app">
@@ -36,6 +54,11 @@
     <section id="play-screen" class="card hidden">
       <div class="hud"><div class="score" id="score">Score: 0</div><div class="lives" id="lives"></div></div>
       <div class="streak" id="streak"></div>
+      <div class="combo hidden" id="combo"><span id="combo-label">COMBO x2</span><div class="combo-track"><div class="combo-fill" id="combo-fill"></div></div></div>
+      <div class="buddy" id="buddy">
+        <img id="buddy-img" src="assets/hub/player-hero.png" alt="Your Explorer buddy">
+        <div class="bubble" id="buddy-bubble">Build great sentences!</div>
+      </div>
       <div class="level-badge" id="level-badge">Easy · Pick sentence</div>
       <div class="timer" id="timer">Timer: 00</div>
       <p class="sq-clue" id="clue"></p>
@@ -136,7 +159,7 @@
     hard: { label: "Hard", grades: "Build it", time: 28, items: buildItems() }
   };
 
-  const PARTY = 5, CHAMP = 10;
+  const PARTY = 50, CHAMP = 120;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const muteBtn = document.getElementById("mute");
   const startScreen = document.getElementById("start-screen");
@@ -171,7 +194,7 @@
   let leaderboard = JSON.parse(localStorage.getItem("sentencequest_lb") || "[]");
   let difficulty = "easy";
   let score = 0, lives = 3, streak = 0, timer = null, timeLeft = 0, audioCtx = null;
-  let overlayCallback = null, roundActive = false, current = null, used = [], built = [];
+  let overlayCallback = null, roundActive = false, current = null, used = [], built = [], partyShown = false;
 
   function shuffle(a) {
     const c = a.slice();
@@ -240,7 +263,45 @@
   function sanitize(n) {
     return String(n || "").replace(/<[^>]*>/g, "").replace(/[^\w\s'-]/g, "").trim().slice(0, 16);
   }
-  function saveScore(name, val) {
+  /* Hub profile contract + Explorer buddy (AUDIT-2026-10-16.md). */
+    const PROFILE_KEY = "sentencequest_profile";
+    function awardHubProgress(points) {
+      let p = {};
+      try { p = JSON.parse(localStorage.getItem(PROFILE_KEY) || "null") || {}; } catch (e) { p = {}; }
+      const xpEarned = Math.min(30, Math.round(points / 8));
+      const starsEarned = points >= 200 ? 3 : points >= 120 ? 2 : points >= 60 ? 1 : 0;
+      p.xp = (typeof p.xp === "number" ? p.xp : 0) + xpEarned;
+      p.stars = (typeof p.stars === "number" ? p.stars : 0) + starsEarned;
+      p.gamesPlayed = (typeof p.gamesPlayed === "number" ? p.gamesPlayed : 0) + 1;
+      p.bestScore = Math.max(typeof p.bestScore === "number" ? p.bestScore : 0, points);
+      p.lastXp = xpEarned; p.lastStars = starsEarned; p.updatedAt = Date.now();
+      try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch (e) {}
+      return { xp: xpEarned, stars: starsEarned };
+    }
+    const buddyEl = document.getElementById("buddy");
+    const buddyBubble = document.getElementById("buddy-bubble");
+    const comboEl = document.getElementById("combo");
+    const comboLabel = document.getElementById("combo-label");
+    const comboFill = document.getElementById("combo-fill");
+    const BUDDY_PRAISE = ["Sentence superstar!", "Built it perfectly!", "Words in a row - nice!"];
+    const BUDDY_COMBO = ["Combo! You're on fire!", "Unstoppable! Keep it rolling!", "Wow - what a streak!"];
+    const BUDDY_OOPS = ["Shake it off - words are tricky!", "So close! Read it again."];
+    function pickLine(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    let buddyTimer = null;
+    function buddySay(text, mood) {
+      if (buddyBubble) buddyBubble.textContent = text;
+      if (!buddyEl) return;
+      buddyEl.classList.remove("cheer", "oops");
+      if (mood) { void buddyEl.offsetWidth; buddyEl.classList.add(mood); }
+      if (buddyTimer) clearTimeout(buddyTimer);
+      if (mood) buddyTimer = setTimeout(function () { buddyEl.classList.remove("cheer", "oops"); }, 950);
+    }
+    function updateCombo() {
+      if (!comboEl) return;
+      comboEl.classList.toggle("hidden", streak < 2);
+      if (streak >= 2) { comboLabel.textContent = "COMBO x" + streak; comboFill.style.width = Math.min(100, 20 + streak * 16) + "%"; }
+    }
+    function saveScore(name, val) {
     const c = sanitize(name);
     if (!c) return;
     leaderboard.push({ name: c, score: val, date: Date.now() });
@@ -290,7 +351,7 @@
   function updateHud() {
     scoreDisplay.textContent = "Score: " + score;
     streakDisplay.textContent = streak >= 2 ? "Streak: " + streak : "";
-    renderLives();
+    renderLives(); updateCombo();
   }
   function flash(kind) {
     playScreen.classList.remove("ok", "bad", "shake");
@@ -351,7 +412,9 @@
   }
   overlayBtn.onclick = function () {
     if (!overlayForm.classList.contains("hidden")) {
-      saveScore(sanitize(nameInput.value) || "Player", score);
+      const nm = sanitize(nameInput.value);
+      saveScore(nm || "Player", score);
+      if (nm) { try { const p = JSON.parse(localStorage.getItem(PROFILE_KEY) || "{}"); p.name = nm; localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch (e) {} }
       renderLeaderboard();
     }
     hideOverlay();
@@ -505,13 +568,12 @@
     if (!roundActive) return;
     roundActive = false;
     stopTimer();
-    score++;
-    streak++;
+    streak++; score += 10 + (streak >= 3 ? 5 : 0);
     updateHud();
     playSound("correct");
     confetti();
     flash("ok");
-    if (score === PARTY || score === CHAMP) celebrate(score >= CHAMP);
+    if (score >= CHAMP) celebrate(true); else if (score >= PARTY && !partyShown) { partyShown = true; celebrate(false); } buddySay(streak >= 3 ? pickLine(BUDDY_COMBO) : pickLine(BUDDY_PRAISE), "cheer");
     setTimeout(function () { if (lives > 0) nextRound(); }, 800);
   }
   function handleMiss(msg) {
@@ -521,7 +583,7 @@
     streak = 0;
     lives--;
     updateHud();
-    flash("bad");
+    flash("bad"); buddySay(pickLine(BUDDY_OOPS), "oops");
     if (lives > 0) {
       playSfx("life");
       playSound("wrong");
@@ -533,11 +595,11 @@
   }
   function startRound() {
     getCtx();
-    score = 0; lives = 3; streak = 0; used = [];
+    score = 0; lives = 3; streak = 0; used = []; partyShown = false;
     startScreen.classList.add("hidden");
     playScreen.classList.remove("hidden");
     updateHud();
-    nextRound();
+    buddySay("Build great sentences!"); nextRound();
   }
   function goHome() {
     if (window.speechSynthesis) speechSynthesis.cancel();
@@ -550,10 +612,10 @@
     stopTimer();
     if (score >= CHAMP) celebrate(true);
     else if (score >= PARTY) celebrate(false);
-    playSfx("fanfare");
+    playSfx("fanfare"); const award = awardHubProgress(score); const awardText = award.xp > 0 ? " You earned " + award.xp + " XP" + (award.stars > 0 ? " and " + award.stars + " star" + (award.stars === 1 ? "" : "s") : "") + " for your 103 Arcade hub profile!" : "";
     showOverlay({
       title: score >= CHAMP ? "Champion!" : "SentenceQuest over!",
-      message: (msg ? msg + " " : "") + "You scored " + score + " point" + (score === 1 ? "" : "s") + ". Add your name to the leaderboard.",
+      message: (msg ? msg + " " : "") + "You scored " + score + " point" + (score === 1 ? "" : "s") + "." + awardText + " Add your name to the leaderboard.",
       button: "Save score",
       askName: true,
       onContinue: goHome
