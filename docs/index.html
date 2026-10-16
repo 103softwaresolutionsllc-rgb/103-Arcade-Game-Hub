@@ -91,7 +91,7 @@
 
         <section class="hub-worlds" aria-label="Enter a Learning World">
           <div class="world-card-grid">
-            <a class="world-card world-card--reading" href="wordquest.html">
+            <a class="world-card world-card--reading" href="wordquest-quest.html">
               <div class="world-card-art" style="background-image:url('assets/worlds/reading/backgrounds/reading-hub-card.webp')"></div>
               <div class="world-card-body">
                 <p class="world-card-kicker"><span aria-hidden="true">📖</span></p>
@@ -100,7 +100,7 @@
                 <span class="world-card-cta">Enter World →</span>
               </div>
             </a>
-            <a class="world-card world-card--spelling" href="spellbuzz.html">
+            <a class="world-card world-card--spelling" href="spellbuzz-quest.html">
               <div class="world-card-art" style="background-image:url('assets/worlds/spelling/backgrounds/spelling-hub-card.webp')"></div>
               <div class="world-card-body">
                 <p class="world-card-kicker"><span aria-hidden="true">🔤</span></p>
@@ -109,7 +109,7 @@
                 <span class="world-card-cta">Enter World →</span>
               </div>
             </a>
-            <a class="world-card world-card--math" href="numbuzz.html">
+            <a class="world-card world-card--math" href="numbuzz-quest.html">
               <div class="world-card-art" style="background-image:url('assets/worlds/math/backgrounds/math-hub-card.webp')"></div>
               <div class="world-card-body">
                 <p class="world-card-kicker"><span aria-hidden="true">🧮</span></p>
@@ -160,7 +160,7 @@
           <div class="hub-adventure-art" style="background-image:url('assets/worlds/reading/backgrounds/reading-hub-card.webp')"></div>
           <h3 id="hub-adventure-title">The Missing Map Pieces</h3>
           <p id="hub-adventure-blurb">Find the next story clue and keep your streak going.</p>
-          <a class="btn hub-adventure-btn" id="hub-adventure-btn" href="wordquest.html">Start Adventure</a>
+          <a class="btn hub-adventure-btn" id="hub-adventure-btn" href="wordquest-quest.html">Start Adventure</a>
         </section>
         <section class="hub-glass">
           <h2>Quick Access</h2>
@@ -213,9 +213,9 @@
   var HUB_NAME_KEY = "arcade_hub_profile";
   var MUTE_KEY = "arcade_hub_mute";
   var WORLD_KEYS = [
-    { key: "wordquest_profile", href: "wordquest.html", label: "Reading World" },
-    { key: "spellbuzz_profile", href: "spellbuzz.html", label: "Spelling World" },
-    { key: "numbuzz_profile", href: "numbuzz.html", label: "Math World" }
+    { key: "wordquest_profile", href: "wordquest-quest.html", label: "Reading World" },
+    { key: "spellbuzz_profile", href: "spellbuzz-quest.html", label: "Spelling World" },
+    { key: "numbuzz_profile", href: "numbuzz-quest.html", label: "Math World" }
   ];
 
   function readJson(key) {
@@ -320,11 +320,11 @@
   var adventureArt = document.querySelector(".hub-adventure-art");
   if (adventureArt) {
     var art = {
-      "wordquest.html": "assets/worlds/reading/backgrounds/reading-hub-card.webp",
-      "spellbuzz.html": "assets/worlds/spelling/backgrounds/spelling-hub-card.webp",
-      "numbuzz.html": "assets/worlds/math/backgrounds/math-hub-card.webp"
+      "wordquest-quest.html": "assets/worlds/reading/backgrounds/reading-hub-card.webp",
+      "spellbuzz-quest.html": "assets/worlds/spelling/backgrounds/spelling-hub-card.webp",
+      "numbuzz-quest.html": "assets/worlds/math/backgrounds/math-hub-card.webp"
     };
-    adventureArt.style.backgroundImage = "url('" + (art[richest.href] || art["wordquest.html"]) + "')";
+    adventureArt.style.backgroundImage = "url('" + (art[richest.href] || art["wordquest-quest.html"]) + "')";
   }
 
   var muted = localStorage.getItem(MUTE_KEY) === "1";
