@@ -293,6 +293,15 @@
     }
   });
 
+  // Standalone games publish "<game>_profile" with the same xp/stars shape
+  // (see AUDIT-2026-10-16.md, hub profile contract). Their play counts here too.
+  var EXTRA_PROFILE_KEYS = ["flipmatch_profile", "abcbuzz_profile", "patternpop_profile", "rhymetime_profile", "sentencequest_profile"];
+  EXTRA_PROFILE_KEYS.forEach(function (key) {
+    var p = readJson(key);
+    totalXp += xpOf(p);
+    totalStars += starsOf(p);
+  });
+
   var level = Math.max(1, Math.floor(totalXp / 500) + 1);
   var intoLevel = totalXp % 500;
   var fill = document.getElementById("hub-xp-fill");

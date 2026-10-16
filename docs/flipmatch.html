@@ -7,6 +7,10 @@
   <title>FlipMatch — by 103 Software Solutions LLC</title>
   <link rel="icon" href="flipmatch.svg" type="image/svg+xml">
   <link rel="stylesheet" href="theme.css">
+  <style>
+    .flip-card-word { display: flex; align-items: center; justify-content: center; background: #fff8e1; color: #1d5c38; font-weight: 800; font-size: clamp(0.95rem, 3.4vw, 1.5rem); letter-spacing: 0.02em; border-radius: 12px; padding: 0.25rem; text-align: center; }
+    .hub-award { font-weight: 700; color: #1d5c38; }
+  </style>
 </head>
 <body class="flipmatch-page">
   <div class="app">
@@ -32,11 +36,15 @@
         <img src="assets/arcade/flipmatch/flipmatch-card-back.png" alt="">
         <img src="assets/arcade/flipmatch/flipmatch-card-fox.png" alt="">
       </div>
-      <p class="howto">Flip two illustrated cards. Find every pair in Memory Grove.</p>
+      <p class="howto">Flip two illustrated cards. Find every pair in Memory Grove — or play Word Match and pair each picture with its word. Finishing a game earns XP and stars for your 103 Arcade hub profile.</p>
       <div class="difficulty" role="group" aria-label="Difficulty">
         <button id="easy" class="active" type="button">Easy<small>4 pairs</small></button>
         <button id="medium" type="button">Medium<small>6 pairs</small></button>
         <button id="hard" type="button">Hard<small>9 pairs</small></button>
+      </div>
+      <div class="difficulty" role="group" aria-label="Match style">
+        <button id="mode-pic" class="active" type="button">Picture Pairs<small>match the pictures</small></button>
+        <button id="mode-word" type="button">Word Match<small>picture + word</small></button>
       </div>
       <button id="play" class="btn" type="button">Play</button>
     </section>
@@ -75,22 +83,23 @@
   <script>
     const CARD_BACK = "assets/arcade/flipmatch/flipmatch-card-back.png";
     const CARD_FACES = {
-      owl: { file: "assets/arcade/flipmatch/flipmatch-card-owl.png", label: "Reading Owl" },
-      fox: { file: "assets/arcade/flipmatch/flipmatch-card-fox.png", label: "Clever Fox" },
-      rabbit: { file: "assets/arcade/flipmatch/flipmatch-card-rabbit.png", label: "Friendly Rabbit" },
-      book: { file: "assets/arcade/flipmatch/flipmatch-card-book.png", label: "Magical Book" },
-      flower: { file: "assets/arcade/flipmatch/flipmatch-card-flower.png", label: "Bright Flower" },
-      tree: { file: "assets/arcade/flipmatch/flipmatch-card-tree.png", label: "Old Oak Tree" },
-      castle: { file: "assets/arcade/flipmatch/flipmatch-card-castle.png", label: "Dream Castle" },
-      star: { file: "assets/arcade/flipmatch/flipmatch-card-star.png", label: "Twinkle Star" },
-      butterfly: { file: "assets/arcade/flipmatch/flipmatch-card-butterfly.png", label: "Painted Butterfly" }
+      owl: { file: "assets/arcade/flipmatch/flipmatch-card-owl.png", label: "Reading Owl", word: "Owl" },
+      fox: { file: "assets/arcade/flipmatch/flipmatch-card-fox.png", label: "Clever Fox", word: "Fox" },
+      rabbit: { file: "assets/arcade/flipmatch/flipmatch-card-rabbit.png", label: "Friendly Rabbit", word: "Rabbit" },
+      book: { file: "assets/arcade/flipmatch/flipmatch-card-book.png", label: "Magical Book", word: "Book" },
+      flower: { file: "assets/arcade/flipmatch/flipmatch-card-flower.png", label: "Bright Flower", word: "Flower" },
+      tree: { file: "assets/arcade/flipmatch/flipmatch-card-tree.png", label: "Old Oak Tree", word: "Tree" },
+      castle: { file: "assets/arcade/flipmatch/flipmatch-card-castle.png", label: "Dream Castle", word: "Castle" },
+      star: { file: "assets/arcade/flipmatch/flipmatch-card-star.png", label: "Twinkle Star", word: "Star" },
+      butterfly: { file: "assets/arcade/flipmatch/flipmatch-card-butterfly.png", label: "Painted Butterfly", word: "Butterfly" }
     };
     const LEVELS = {
       easy: { label: "Easy", grades: "4 pairs", time: 75, cols: 4, pairs: ["owl", "fox", "rabbit", "book"] },
       medium: { label: "Medium", grades: "6 pairs", time: 80, cols: 4, pairs: ["owl", "fox", "rabbit", "book", "flower", "tree"] },
       hard: { label: "Hard", grades: "9 pairs", time: 100, cols: 6, pairs: ["owl", "fox", "rabbit", "book", "flower", "tree", "castle", "star", "butterfly"] }
     };
-    const PARTY = 5, CHAMP = 10;
+    const PARTY = 50, CHAMP = 120;
+    const PROFILE_KEY = "flipmatch_profile";
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const muteBtn = document.getElementById("mute");
     const startScreen = document.getElementById("start-screen");
@@ -114,8 +123,8 @@
 
     let muted = localStorage.getItem("flipmatch_mute") === "1";
     let leaderboard = JSON.parse(localStorage.getItem("flipmatch_lb") || "[]");
-    let difficulty = "easy", score = 0, lives = 3, streak = 0, timer = null, timeLeft = 0;
-    let audioCtx = null, overlayCallback = null, roundActive = false, lock = false;
+    let difficulty = "easy", mode = "pic", score = 0, lives = 3, streak = 0, timer = null, timeLeft = 0;
+    let audioCtx = null, overlayCallback = null, roundActive = false, lock = false, partyShown = false;
     let cards = [], flipped = [];
 
     function shuffle(a){ const c=a.slice(); for(let i=c.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [c[i],c[j]]=[c[j],c[i]]; } return c; }
@@ -130,8 +139,28 @@
     function sanitize(n){ return String(n||"").replace(/<[^>]*>/g,"").replace(/[^\w\s'-]/g,"").trim().slice(0,16); }
     function saveScore(name,val){ const c=sanitize(name); if(!c) return; leaderboard.push({name:c,score:val,date:Date.now()}); leaderboard.sort((a,b)=>b.score-a.score); leaderboard=leaderboard.slice(0,10); localStorage.setItem("flipmatch_lb", JSON.stringify(leaderboard)); }
     function renderLeaderboard(){ const body=document.getElementById("lb-body"); body.replaceChildren(); clearLbBtn.classList.toggle("hidden", !leaderboard.length); if(!leaderboard.length){ const p=document.createElement("p"); p.className="empty"; p.textContent="No scores yet. Play a round to get on the board!"; body.appendChild(p); return;} const ol=document.createElement("ol"); leaderboard.forEach(e=>{ const li=document.createElement("li"); li.textContent=e.name+": "+e.score; ol.appendChild(li); }); body.appendChild(ol); }
-    function setDiff(d){ difficulty=d; for(const k in diffBtns) diffBtns[k].classList.remove("active"); diffBtns[d].classList.add("active"); const L=LEVELS[d]; levelBadge.textContent=L.label+" · "+L.grades; }
+    function updateBadge(){ const L=LEVELS[difficulty]; levelBadge.textContent=L.label+" · "+L.grades+(mode==="word"?" · Word Match":""); }
+    function setDiff(d){ difficulty=d; for(const k in diffBtns) diffBtns[k].classList.remove("active"); diffBtns[d].classList.add("active"); updateBadge(); }
     diffBtns.easy.onclick=()=>setDiff("easy"); diffBtns.medium.onclick=()=>setDiff("medium"); diffBtns.hard.onclick=()=>setDiff("hard");
+    const modeBtns = { pic: document.getElementById("mode-pic"), word: document.getElementById("mode-word") };
+    function setMode(m){ mode=m; for(const k in modeBtns) modeBtns[k].classList.remove("active"); modeBtns[m].classList.add("active"); updateBadge(); }
+    modeBtns.pic.onclick=()=>setMode("pic"); modeBtns.word.onclick=()=>setMode("word");
+    // Hub profile contract (AUDIT-2026-10-16.md): standalone games publish progress under
+    // "<game>_profile" as { name, xp, stars, gamesPlayed, bestScore, updatedAt }; the hub
+    // aggregates xp/stars from these keys alongside the three world profiles.
+    function awardHubProgress(points){
+      let p = {};
+      try { p = JSON.parse(localStorage.getItem(PROFILE_KEY) || "null") || {}; } catch(e) { p = {}; }
+      const xpEarned = Math.min(30, Math.round(points / 8));
+      const starsEarned = points >= 200 ? 3 : points >= 120 ? 2 : points >= 60 ? 1 : 0;
+      p.xp = (typeof p.xp === "number" ? p.xp : 0) + xpEarned;
+      p.stars = (typeof p.stars === "number" ? p.stars : 0) + starsEarned;
+      p.gamesPlayed = (typeof p.gamesPlayed === "number" ? p.gamesPlayed : 0) + 1;
+      p.bestScore = Math.max(typeof p.bestScore === "number" ? p.bestScore : 0, points);
+      p.lastXp = xpEarned; p.lastStars = starsEarned; p.updatedAt = Date.now();
+      try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch(e) {}
+      return { xp: xpEarned, stars: starsEarned };
+    }
     function renderLives(){ livesEl.replaceChildren(); for(let i=0;i<3;i++){ const s=document.createElement("span"); s.className="life"+(i>=lives?" gone":""); s.textContent="💛"; livesEl.appendChild(s);} }
     function updateHud(){ scoreDisplay.textContent="Score: "+score; streakDisplay.textContent=streak>=2?"Streak: "+streak:""; renderLives(); }
     function flash(kind){ playScreen.classList.remove("ok","bad","shake"); playScreen.classList.add(kind==="ok"?"ok":"bad"); if(kind!=="ok" && !reduceMotion) playScreen.classList.add("shake"); setTimeout(()=>playScreen.classList.remove("ok","bad","shake"),700); }
@@ -139,11 +168,16 @@
     function celebrate(big){ if(reduceMotion) return; const colors=["#ff8c00","#ffff00","#32cd32","#00ffff","#ff00ff"]; celebrateEl.replaceChildren(); for(let i=0;i<(big?16:10);i++){ const r=document.createElement("span"); r.className="streamer"; r.style.left=(4+i*6)+"%"; r.style.height=40+Math.random()*24+"vh"; r.style.background="linear-gradient(180deg,"+colors[i%colors.length]+",transparent)"; r.style.color=colors[i%colors.length]; celebrateEl.appendChild(r);} for(let i=0;i<(big?80:40);i++){ const b=document.createElement("span"); b.className="party-confetti"; b.style.left=Math.random()*100+"%"; b.style.background=colors[i%colors.length]; b.style.setProperty("--drift",(Math.random()*160-80)+"px"); celebrateEl.appendChild(b);} playSfx(big?"fanfare":"sparkle"); setTimeout(()=>celebrateEl.replaceChildren(), big?4500:3000); }
     function showOverlay(o){ overlayTitle.textContent=o.title; overlayMsg.textContent=o.message; overlayBtn.textContent=o.button||"Continue"; overlayForm.classList.toggle("hidden", !o.askName); overlay.classList.remove("hidden"); overlayCallback=o.onContinue||null; if(o.askName){ nameInput.value=""; nameInput.focus(); } else overlayBtn.focus(); }
     function hideOverlay(){ overlay.classList.add("hidden"); const cb=overlayCallback; overlayCallback=null; if(cb) cb(); }
-    overlayBtn.onclick=function(){ if(!overlayForm.classList.contains("hidden")){ saveScore(sanitize(nameInput.value)||"Player", score); renderLeaderboard(); } hideOverlay(); };
+    overlayBtn.onclick=function(){ if(!overlayForm.classList.contains("hidden")){ const nm=sanitize(nameInput.value); saveScore(nm||"Player", score); if(nm){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||"{}"); p.name=nm; localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} } renderLeaderboard(); } hideOverlay(); };
 
     function deal(){
       const L=LEVELS[difficulty];
-      const deck=shuffle(L.pairs.concat(L.pairs)).map((v,i)=>({ id:i, value:v, open:false, matched:false }));
+      let deck;
+      if(mode==="word"){
+        deck=shuffle(L.pairs.flatMap(v=>[{value:v,kind:"pic"},{value:v,kind:"word"}])).map((c,i)=>({ id:i, value:c.value, kind:c.kind, open:false, matched:false }));
+      } else {
+        deck=shuffle(L.pairs.concat(L.pairs)).map((v,i)=>({ id:i, value:v, kind:"pic", open:false, matched:false }));
+      }
       cards=deck; flipped=[]; lock=false;
       boardEl.style.gridTemplateColumns="repeat("+L.cols+", minmax(0,1fr))";
       renderBoard();
@@ -156,18 +190,27 @@
         b.className="btn mem-card flip-card"+(c.matched?" matched": c.open?" open":" back");
         b.type="button";
         b.setAttribute("aria-label", (c.open||c.matched) ? ((CARD_FACES[c.value]&&CARD_FACES[c.value].label)||c.value) : "Hidden card");
-        const img=document.createElement("img");
-        img.alt="";
-        img.draggable=false;
-        if(c.open||c.matched){
+        if((c.open||c.matched) && c.kind==="word"){
           const face=CARD_FACES[c.value];
-          img.src=face?face.file:CARD_BACK;
-          img.className="flip-card-face";
+          const span=document.createElement("span");
+          span.className="flip-card-face flip-card-word";
+          span.textContent=face?face.word:c.value;
+          b.appendChild(span);
+          b.setAttribute("aria-label", (face?face.word+" (word card)":"Word card"));
         } else {
-          img.src=CARD_BACK;
-          img.className="flip-card-back";
+          const img=document.createElement("img");
+          img.alt="";
+          img.draggable=false;
+          if(c.open||c.matched){
+            const face=CARD_FACES[c.value];
+            img.src=face?face.file:CARD_BACK;
+            img.className="flip-card-face";
+          } else {
+            img.src=CARD_BACK;
+            img.className="flip-card-back";
+          }
+          b.appendChild(img);
         }
-        b.appendChild(img);
         b.disabled=c.matched||lock;
         b.onclick=function(){ flip(idx); };
         boardEl.appendChild(b);
@@ -181,14 +224,14 @@
       if(flipped.length<2) return;
       lock=true;
       const a=cards[flipped[0]], b=cards[flipped[1]];
-      if(a.value===b.value){
+      if(a.value===b.value && (mode==="pic" || a.kind!==b.kind)){
         a.matched=b.matched=true; flipped=[]; lock=false;
-        score++; streak++; updateHud(); playSound("correct"); confetti(); flash("ok");
-        if(score===PARTY||score===CHAMP) celebrate(score>=CHAMP);
+        streak++; score += 10 + (streak>=3 ? 5 : 0); updateHud(); playSound("correct"); confetti(); flash("ok");
+        if(score>=CHAMP) celebrate(true); else if(score>=PARTY && !partyShown){ partyShown=true; celebrate(false); }
         renderBoard();
         if(cards.every(x=>x.matched)){
-          stopTimer(); roundActive=false; celebrate(true);
-          showOverlay({ title:"Board clear!", message:"Nice matching. Ready for another board?", button:"Next board", onContinue:function(){ roundActive=true; deal(); } });
+          stopTimer(); roundActive=false; score+=20; updateHud(); celebrate(true);
+          showOverlay({ title:"Board clear!", message:"Nice matching — +20 bonus points. Ready for another board?", button:"Next board", onContinue:function(){ roundActive=true; deal(); } });
         }
       } else {
         playSound("wrong"); flash("bad"); streak=0;
@@ -210,9 +253,9 @@
       },1000);
     }
     function stopTimer(){ if(timer) clearInterval(timer); timer=null; timerDisplay.classList.remove("urgent"); }
-    function startRound(){ getCtx(); score=0; lives=3; streak=0; startScreen.classList.add("hidden"); playScreen.classList.remove("hidden"); updateHud(); roundActive=true; deal(); }
+    function startRound(){ getCtx(); score=0; lives=3; streak=0; partyShown=false; startScreen.classList.add("hidden"); playScreen.classList.remove("hidden"); updateHud(); roundActive=true; deal(); }
     function goHome(){ stopTimer(); roundActive=false; playScreen.classList.add("hidden"); startScreen.classList.remove("hidden"); }
-    function endGame(msg){ stopTimer(); if(score>=CHAMP) celebrate(true); else if(score>=PARTY) celebrate(false); playSfx("fanfare"); showOverlay({ title: score>=CHAMP?"Champion!":"FlipMatch over!", message:(msg?msg+" ":"")+"You scored "+score+" point"+(score===1?"":"s")+". Add your name to the leaderboard.", button:"Save score", askName:true, onContinue:goHome }); }
+    function endGame(msg){ stopTimer(); if(score>=CHAMP) celebrate(true); else if(score>=PARTY) celebrate(false); playSfx("fanfare"); const award=awardHubProgress(score); const awardText = award.xp>0 ? " You earned "+award.xp+" XP"+(award.stars>0?" and "+award.stars+" star"+(award.stars===1?"":"s"):"")+" for your 103 Arcade hub profile!" : ""; showOverlay({ title: score>=CHAMP?"Champion!":"FlipMatch over!", message:(msg?msg+" ":"")+"You scored "+score+" point"+(score===1?"":"s")+"."+awardText+" Add your name to the leaderboard.", button:"Save score", askName:true, onContinue:goHome }); }
     document.getElementById("play").onclick=startRound;
     clearLbBtn.onclick=()=>{ confirmEl.classList.remove("hidden"); };
     document.getElementById("confirm-no").onclick=()=>confirmEl.classList.add("hidden");
