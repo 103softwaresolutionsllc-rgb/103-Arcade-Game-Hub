@@ -181,6 +181,7 @@
 
   <script src="numbuzz-content.js"></script>
   <script src="numbuzz-engine.js"></script>
+  <script src="arcade-assets.js"></script>
   <script src="quest-kit.js"></script>
   <script src="arcade-ai.js"></script>
   <script>
@@ -205,9 +206,10 @@
   function playSfx(k) { if (muted) return; if (k === "click") tone(880, 0.05, "triangle", 0.05); else if (k === "sparkle") { tone(784, 0.1, "sine", 0.06); tone(1174, 0.16, "sine", 0.07, 0.1); } else if (k === "fanfare") { tone(523, 0.12, "square", 0.05); tone(784, 0.2, "square", 0.05, 0.14); } else if (k === "hit") { tone(196, 0.12, "sawtooth", 0.06); tone(392, 0.1, "square", 0.05, 0.05); } }
   function playSound(n) { if (n === "correct") { playMp3("snd-correct", 0.85); playSfx("hit"); if (battle && battle.streak >= 3) playSfx("sparkle"); } else if (n === "wrong") { playMp3("snd-wrong", 0.45); tone(140, 0.2, "sawtooth", 0.05); } }
   const muteBtn = $("mute");
-  function updateMuteUi() { muteBtn.textContent = muted ? "🔇" : "🔊"; }
+  function updateMuteUi() { muteBtn.textContent = muted ? "🔇" : "🔊"; if (window.ArcadeAssets && window.ArcadeAssets.setMuted) window.ArcadeAssets.setMuted(muted); }
   muteBtn.onclick = function () { muted = !muted; localStorage.setItem("numbuzz_mute", muted ? "1" : "0"); updateMuteUi(); };
   updateMuteUi();
+  if (window.ArcadeAssets && window.ArcadeAssets.load) window.ArcadeAssets.load();
 
   function celebrate(big) {
     if (reduceMotion) return;
@@ -551,13 +553,24 @@ spriteEl.innerHTML = window.ArcadeSprites.create({ seed: worldId + ":" + node.id
   $("end-map").onclick = function () { $("end-overlay").classList.add("hidden"); renderMap(); };
   $("end-retry").onclick = function () { $("end-overlay").classList.add("hidden"); if (lastBattle) startBattle(lastBattle.node, lastBattle.lesson); else renderMap(); };
   $("quit-battle").onclick = function () { battle = null; renderMap(); };
-  $("speak").onclick = function () {
-    const a = act();
-    if (!a || !window.speechSynthesis) return;
+  function speakSmart(text, a) {
+    if (!text || muted) return;
+    const opts = a ? { type: a.type, skill: a.skill } : {};
+    if (window.ArcadeAssets && typeof window.ArcadeAssets.playVoice === "function") {
+      const run = function () { window.ArcadeAssets.playVoice(text, opts); };
+      if (window.ArcadeAssets.load) window.ArcadeAssets.load().then(run);
+      else run();
+      return;
+    }
+    if (!window.speechSynthesis) return;
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(a.speak || a.prompt);
+    const u = new SpeechSynthesisUtterance(text);
     u.rate = 0.85; u.lang = "en-US";
     speechSynthesis.speak(u);
+  }
+  $("speak").onclick = function () {
+    const a = act();
+    if (a) speakSmart(a.speak || a.prompt, a);
   };
   $("hint").onclick = function () {
     if (!battle) return;
