@@ -49,6 +49,13 @@ worlds after the big three land.
 5. Boss mechanics per world (the engines already track boss clears) and
    cosmetics/companions surfaced in the new shells.
 
+## Phase 2 — boss battles + sprite materials ✅ BUILT + verified (in repo, pending live push)
+
+- **quest-kit.js** (new shared file): `ArcadeSprites` — a deterministic SVG sprite factory: 10 materials (crystal, slime, rock, magma, ice, candy, leaf, shadow, metal, honey) × 5 silhouettes × face/extra variants, seeded per world:node so every stop has its own creature; bosses get crowns, fierce eyes, fangs and a larger stage presence. `ArcadeBoss` — authored-boss lookup plus mastery-remix bosses assembled from a node's own toughest lesson questions.
+- **Boss battles in all three quest games:** mastering a node (all lessons done) reveals a BOSS stop on the map. The one authored boss per game (Number Scrambler / Story Dragon / Silent Letter Beast) plays with its real content; every other mastered node gets a remix boss (+20 XP / ★2). Settlement runs through the engines' own contract: applyReward WITHOUT a lessonKey (no phantom lessons in the count) + clearBoss → engagement.bossesCleared; cleared bosses show a crown on the map and can be rematched.
+- Story Quest scenes also gained a per-chapter creature in the storybook that reacts to right/wrong answers; the guardian form fronts boss chapters.
+- Verified by scripted playthroughs: all three authored bosses beaten end-to-end (bossesCleared recorded, exact +20 XP / +2 stars, zero phantom lesson keys, crown state on map), remix rows present for every mastered node, and full regression re-runs of the original lesson playthroughs.
+
 ## Verification bar
 
 Every rebuilt page: scripts pass syntax checks, all engine calls match the
