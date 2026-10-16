@@ -8,8 +8,36 @@
   <link rel="icon" href="flipmatch.svg" type="image/svg+xml">
   <link rel="stylesheet" href="theme.css">
   <style>
-    .flip-card-word { display: flex; align-items: center; justify-content: center; background: #fff8e1; color: #1d5c38; font-weight: 800; font-size: clamp(0.95rem, 3.4vw, 1.5rem); letter-spacing: 0.02em; border-radius: 12px; padding: 0.25rem; text-align: center; }
+    .flip-card-word { display: flex; align-items: center; justify-content: center; background: #fff8e1; color: #1d5c38; font-weight: 800; font-size: clamp(0.95rem, 3.4vw, 1.5rem); letter-spacing: 0.02em; border-radius: 12px; padding: 0.25rem; text-align: center; width: 100%; height: 100%; }
     .hub-award { font-weight: 700; color: #1d5c38; }
+    /* Game-feel kit: 3D flips, buddy reactions, combo meter, treasure moment. */
+    .flip-card { position: relative; perspective: 600px; }
+    .flip-inner { position: relative; display: block; width: 100%; height: 100%; transform-style: preserve-3d; }
+    .flip-card.open .flip-inner, .flip-card.matched .flip-inner { transform: rotateY(180deg); }
+    .flip-inner.anim-flip { animation: flipIn .45s cubic-bezier(.2,.7,.3,1.3); }
+    .flip-inner.anim-back { animation: flipOut .4s ease; }
+    @keyframes flipIn { from { transform: rotateY(0); } to { transform: rotateY(180deg); } }
+    @keyframes flipOut { from { transform: rotateY(180deg); } to { transform: rotateY(0); } }
+    .flip-side { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+    .flip-frontside { transform: rotateY(180deg); }
+    .flip-card.anim-pop { animation: scorePop .45s ease; }
+    .float-score { position: absolute; top: 4px; right: 8px; font-weight: 900; font-size: 1.05rem; color: #ffdf3a; text-shadow: 0 2px 0 rgba(0,0,0,.5); animation: floatUp .9s ease-out forwards; pointer-events: none; z-index: 3; }
+    .buddy { display: flex; align-items: flex-end; gap: .55rem; margin: .35rem 0 .15rem; }
+    .buddy img { height: 92px; width: auto; filter: drop-shadow(0 4px 6px rgba(0,0,0,.35)); animation: buddyBob 2.6s ease-in-out infinite; }
+    .buddy.cheer img { animation: buddyJump .55s ease; }
+    .buddy.oops img { animation: buddyNudge .4s ease; }
+    @keyframes buddyBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @keyframes buddyJump { 30% { transform: translateY(-16px) rotate(-3deg); } 65% { transform: translateY(0); } }
+    @keyframes buddyNudge { 25% { transform: translateX(-5px) rotate(-2deg); } 75% { transform: translateX(5px) rotate(2deg); } }
+    .bubble { background: #fff; color: #17341f; border-radius: 14px; padding: .45rem .7rem; font-weight: 700; line-height: 1.25; box-shadow: 0 3px 10px rgba(0,0,0,.25); position: relative; max-width: 78%; }
+    .bubble:after { content: ""; position: absolute; left: -7px; bottom: 14px; border: 8px solid transparent; border-right-color: #fff; border-left: 0; }
+    .combo { display: flex; align-items: center; gap: .5rem; margin: .3rem 0 .1rem; }
+    .combo > span { font-weight: 900; color: #ffd23f; text-shadow: 0 2px 0 rgba(0,0,0,.4); letter-spacing: .03em; white-space: nowrap; }
+    .combo-track { flex: 1; height: 10px; background: rgba(255,255,255,.18); border-radius: 99px; overflow: hidden; }
+    .combo-fill { height: 100%; width: 0; background: linear-gradient(90deg, #ffd23f, #ff7b00, #ff3d00); transition: width .3s ease; }
+    .treasure-card { text-align: center; }
+    .treasure-star { width: 110px; height: auto; animation: pulse 1s ease-in-out infinite; margin: 0 auto; display: block; }
+    @media (prefers-reduced-motion: reduce) { .buddy img, .buddy.cheer img, .buddy.oops img, .treasure-star { animation: none; } .flip-inner.anim-flip, .flip-inner.anim-back { animation-duration: .01s; } }
   </style>
 </head>
 <body class="flipmatch-page">
@@ -54,6 +82,11 @@
         <div class="lives" id="lives"></div>
       </div>
       <div class="streak" id="streak"></div>
+      <div class="combo hidden" id="combo"><span id="combo-label">COMBO ×2</span><div class="combo-track"><div class="combo-fill" id="combo-fill"></div></div></div>
+      <div class="buddy" id="buddy">
+        <img id="buddy-img" src="assets/hub/player-hero.png" alt="Your Explorer buddy">
+        <div class="bubble" id="buddy-bubble">Find the pairs!</div>
+      </div>
       <div class="level-badge" id="level-badge">Easy · 4 pairs</div>
       <div class="timer" id="timer">Timer: 00</div>
       <div id="board" class="mem-grid flipmatch-board"></div>
@@ -67,6 +100,11 @@
       <p>&copy; 2026 FlipMatch. Built by <strong>103 Software Solutions LLC</strong>. All Rights Reserved.</p>
     </footer>
   </div>
+  <div id="treasure" class="overlay hidden" role="dialog"><div class="overlay-card treasure-card">
+    <img src="assets/arcade/flipmatch/flipmatch-card-star.png" class="treasure-star" alt="">
+    <h2>Treasure!</h2><p id="treasure-msg"></p>
+    <div class="actions"><button id="treasure-btn" class="btn" type="button">Collect</button></div>
+  </div></div>
   <div id="celebrate" aria-hidden="true"></div>
   <div id="confirm" class="overlay hidden" role="dialog"><div class="overlay-card">
     <h2>Clear leaderboard?</h2><p>This removes all saved scores on this device.</p>
@@ -126,6 +164,7 @@
     let difficulty = "easy", mode = "pic", score = 0, lives = 3, streak = 0, timer = null, timeLeft = 0;
     let audioCtx = null, overlayCallback = null, roundActive = false, lock = false, partyShown = false;
     let cards = [], flipped = [];
+    let animFlipIdx = -1, animBackPair = null, animPopPair = null, lastGain = 0, hurrySaid = false;
 
     function shuffle(a){ const c=a.slice(); for(let i=c.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [c[i],c[j]]=[c[j],c[i]]; } return c; }
     function getCtx(){ const C=window.AudioContext||window.webkitAudioContext; if(!C) return null; if(!audioCtx) audioCtx=new C(); if(audioCtx.state==="suspended") audioCtx.resume(); return audioCtx; }
@@ -137,6 +176,25 @@
     muteBtn.onclick=function(){ muted=!muted; localStorage.setItem("flipmatch_mute", muted?"1":"0"); updateMuteUi(); if(!muted) playSfx("click"); };
     document.querySelectorAll("button").forEach(b=>{ if(b.id!=="mute") b.addEventListener("click",()=>playSfx("click")); });
     function sanitize(n){ return String(n||"").replace(/<[^>]*>/g,"").replace(/[^\w\s'-]/g,"").trim().slice(0,16); }
+    const buddyEl = document.getElementById("buddy");
+    const buddyBubble = document.getElementById("buddy-bubble");
+    const comboEl = document.getElementById("combo");
+    const comboLabel = document.getElementById("combo-label");
+    const comboFill = document.getElementById("combo-fill");
+    const BUDDY_START = ["Find the pairs!", "Memory Grove awaits — let's go!", "Flip smart, Explorer!", "I bet you can clear this board!"];
+    const BUDDY_PRAISE = ["Nice match!", "You found them!", "Sharp eyes!", "Way to go!", "Super matching!"];
+    const BUDDY_COMBO = ["Combo! You're on fire!", "Unstoppable! Keep it rolling!", "Wow — what a streak!"];
+    const BUDDY_OOPS = ["Ooh, so close!", "Shake it off — try again!", "Almost! Remember where they are."];
+    function pickLine(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+    let buddyTimer = null;
+    function buddySay(text, mood){
+      if (buddyBubble) buddyBubble.textContent = text;
+      if (!buddyEl) return;
+      buddyEl.classList.remove("cheer", "oops");
+      if (mood) { void buddyEl.offsetWidth; buddyEl.classList.add(mood); }
+      if (buddyTimer) clearTimeout(buddyTimer);
+      if (mood) buddyTimer = setTimeout(()=>buddyEl.classList.remove("cheer", "oops"), 950);
+    }
     function saveScore(name,val){ const c=sanitize(name); if(!c) return; leaderboard.push({name:c,score:val,date:Date.now()}); leaderboard.sort((a,b)=>b.score-a.score); leaderboard=leaderboard.slice(0,10); localStorage.setItem("flipmatch_lb", JSON.stringify(leaderboard)); }
     function renderLeaderboard(){ const body=document.getElementById("lb-body"); body.replaceChildren(); clearLbBtn.classList.toggle("hidden", !leaderboard.length); if(!leaderboard.length){ const p=document.createElement("p"); p.className="empty"; p.textContent="No scores yet. Play a round to get on the board!"; body.appendChild(p); return;} const ol=document.createElement("ol"); leaderboard.forEach(e=>{ const li=document.createElement("li"); li.textContent=e.name+": "+e.score; ol.appendChild(li); }); body.appendChild(ol); }
     function updateBadge(){ const L=LEVELS[difficulty]; levelBadge.textContent=L.label+" · "+L.grades+(mode==="word"?" · Word Match":""); }
@@ -162,12 +220,23 @@
       return { xp: xpEarned, stars: starsEarned };
     }
     function renderLives(){ livesEl.replaceChildren(); for(let i=0;i<3;i++){ const s=document.createElement("span"); s.className="life"+(i>=lives?" gone":""); s.textContent="💛"; livesEl.appendChild(s);} }
-    function updateHud(){ scoreDisplay.textContent="Score: "+score; streakDisplay.textContent=streak>=2?"Streak: "+streak:""; renderLives(); }
+    function updateHud(){ scoreDisplay.textContent="Score: "+score; streakDisplay.textContent=streak>=2?"Streak: "+streak:""; if(comboEl){ comboEl.classList.toggle("hidden", streak<2); if(streak>=2){ comboLabel.textContent="COMBO ×"+streak; comboFill.style.width=Math.min(100, 20+streak*16)+"%"; } } renderLives(); }
     function flash(kind){ playScreen.classList.remove("ok","bad","shake"); playScreen.classList.add(kind==="ok"?"ok":"bad"); if(kind!=="ok" && !reduceMotion) playScreen.classList.add("shake"); setTimeout(()=>playScreen.classList.remove("ok","bad","shake"),700); }
     function confetti(){ if(reduceMotion) return; const colors=["#ff8c00","#ffff00","#32cd32","#00ffff","#ff00ff"]; for(let i=0;i<16;i++){ const d=document.createElement("span"); d.className="confetti"; d.style.left=Math.random()*90+5+"%"; d.style.background=colors[i%colors.length]; playScreen.appendChild(d); setTimeout(()=>d.remove(),1000);} }
     function celebrate(big){ if(reduceMotion) return; const colors=["#ff8c00","#ffff00","#32cd32","#00ffff","#ff00ff"]; celebrateEl.replaceChildren(); for(let i=0;i<(big?16:10);i++){ const r=document.createElement("span"); r.className="streamer"; r.style.left=(4+i*6)+"%"; r.style.height=40+Math.random()*24+"vh"; r.style.background="linear-gradient(180deg,"+colors[i%colors.length]+",transparent)"; r.style.color=colors[i%colors.length]; celebrateEl.appendChild(r);} for(let i=0;i<(big?80:40);i++){ const b=document.createElement("span"); b.className="party-confetti"; b.style.left=Math.random()*100+"%"; b.style.background=colors[i%colors.length]; b.style.setProperty("--drift",(Math.random()*160-80)+"px"); celebrateEl.appendChild(b);} playSfx(big?"fanfare":"sparkle"); setTimeout(()=>celebrateEl.replaceChildren(), big?4500:3000); }
     function showOverlay(o){ overlayTitle.textContent=o.title; overlayMsg.textContent=o.message; overlayBtn.textContent=o.button||"Continue"; overlayForm.classList.toggle("hidden", !o.askName); overlay.classList.remove("hidden"); overlayCallback=o.onContinue||null; if(o.askName){ nameInput.value=""; nameInput.focus(); } else overlayBtn.focus(); }
     function hideOverlay(){ overlay.classList.add("hidden"); const cb=overlayCallback; overlayCallback=null; if(cb) cb(); }
+    const treasureEl = document.getElementById("treasure");
+    const treasureMsg = document.getElementById("treasure-msg");
+    function openTreasure(){
+      const bonus=[30,40,50,60][Math.floor(Math.random()*4)];
+      score+=bonus; updateHud();
+      treasureMsg.textContent="You cleared the board (+20) — and the grove hid treasure here: +"+bonus+" bonus points!";
+      treasureEl.classList.remove("hidden");
+      celebrate(false);
+      buddySay("Treasure! Amazing work!", "cheer");
+      document.getElementById("treasure-btn").focus();
+    }
     overlayBtn.onclick=function(){ if(!overlayForm.classList.contains("hidden")){ const nm=sanitize(nameInput.value); saveScore(nm||"Player", score); if(nm){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||"{}"); p.name=nm; localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} } renderLeaderboard(); } hideOverlay(); };
 
     function deal(){
@@ -178,7 +247,8 @@
       } else {
         deck=shuffle(L.pairs.concat(L.pairs)).map((v,i)=>({ id:i, value:v, kind:"pic", open:false, matched:false }));
       }
-      cards=deck; flipped=[]; lock=false;
+      cards=deck; flipped=[]; lock=false; hurrySaid=false;
+      buddySay(mode==="word" ? "Match each picture to its word!" : pickLine(BUDDY_START));
       boardEl.style.gridTemplateColumns="repeat("+L.cols+", minmax(0,1fr))";
       renderBoard();
       startTimer(L.time);
@@ -189,53 +259,70 @@
         const b=document.createElement("button");
         b.className="btn mem-card flip-card"+(c.matched?" matched": c.open?" open":" back");
         b.type="button";
-        b.setAttribute("aria-label", (c.open||c.matched) ? ((CARD_FACES[c.value]&&CARD_FACES[c.value].label)||c.value) : "Hidden card");
-        if((c.open||c.matched) && c.kind==="word"){
-          const face=CARD_FACES[c.value];
+        const face=CARD_FACES[c.value];
+        b.setAttribute("aria-label", (c.open||c.matched) ? (c.kind==="word" ? ((face&&face.word)||c.value)+" (word card)" : ((face&&face.label)||c.value)) : "Hidden card");
+        const inner=document.createElement("span");
+        inner.className="flip-inner";
+        if(idx===animFlipIdx) inner.classList.add("anim-flip");
+        if(animBackPair && animBackPair.indexOf(idx)>=0) inner.classList.add("anim-back");
+        if(animPopPair && animPopPair.indexOf(idx)>=0) b.classList.add("anim-pop");
+        const backSide=document.createElement("span");
+        backSide.className="flip-side flip-backside";
+        const backImg=document.createElement("img");
+        backImg.src=CARD_BACK; backImg.alt=""; backImg.draggable=false; backImg.className="flip-card-back";
+        backSide.appendChild(backImg);
+        const frontSide=document.createElement("span");
+        frontSide.className="flip-side flip-frontside";
+        if(c.kind==="word"){
           const span=document.createElement("span");
           span.className="flip-card-face flip-card-word";
           span.textContent=face?face.word:c.value;
-          b.appendChild(span);
-          b.setAttribute("aria-label", (face?face.word+" (word card)":"Word card"));
+          frontSide.appendChild(span);
         } else {
           const img=document.createElement("img");
-          img.alt="";
-          img.draggable=false;
-          if(c.open||c.matched){
-            const face=CARD_FACES[c.value];
-            img.src=face?face.file:CARD_BACK;
-            img.className="flip-card-face";
-          } else {
-            img.src=CARD_BACK;
-            img.className="flip-card-back";
-          }
-          b.appendChild(img);
+          img.alt=""; img.draggable=false;
+          img.src=face?face.file:CARD_BACK;
+          img.className="flip-card-face";
+          frontSide.appendChild(img);
+        }
+        inner.appendChild(backSide); inner.appendChild(frontSide);
+        b.appendChild(inner);
+        if(animPopPair && animPopPair.indexOf(idx)>=0 && lastGain>0){
+          const pop=document.createElement("span");
+          pop.className="float-score";
+          pop.textContent="+"+lastGain;
+          b.appendChild(pop);
         }
         b.disabled=c.matched||lock;
         b.onclick=function(){ flip(idx); };
         boardEl.appendChild(b);
       });
+      animFlipIdx=-1; animBackPair=null; animPopPair=null;
     }
     function flip(idx){
       if(!roundActive||lock) return;
       const c=cards[idx];
       if(c.open||c.matched) return;
-      c.open=true; flipped.push(idx); renderBoard();
+      c.open=true; flipped.push(idx); animFlipIdx=idx; renderBoard();
       if(flipped.length<2) return;
       lock=true;
-      const a=cards[flipped[0]], b=cards[flipped[1]];
+      const i1=flipped[0], i2=flipped[1];
+      const a=cards[i1], b=cards[i2];
       if(a.value===b.value && (mode==="pic" || a.kind!==b.kind)){
         a.matched=b.matched=true; flipped=[]; lock=false;
-        streak++; score += 10 + (streak>=3 ? 5 : 0); updateHud(); playSound("correct"); confetti(); flash("ok");
+        streak++; lastGain=10+(streak>=3?5:0); score+=lastGain; animPopPair=[i1,i2];
+        updateHud(); playSound("correct"); confetti(); flash("ok");
+        buddySay(streak>=3?pickLine(BUDDY_COMBO):pickLine(BUDDY_PRAISE), "cheer");
         if(score>=CHAMP) celebrate(true); else if(score>=PARTY && !partyShown){ partyShown=true; celebrate(false); }
         renderBoard();
         if(cards.every(x=>x.matched)){
           stopTimer(); roundActive=false; score+=20; updateHud(); celebrate(true);
-          showOverlay({ title:"Board clear!", message:"Nice matching — +20 bonus points. Ready for another board?", button:"Next board", onContinue:function(){ roundActive=true; deal(); } });
+          openTreasure();
         }
       } else {
-        playSound("wrong"); flash("bad"); streak=0;
-        setTimeout(()=>{ a.open=b.open=false; flipped=[]; lock=false; renderBoard(); loseLife("Those cards did not match."); }, 700);
+        playSound("wrong"); flash("bad"); streak=0; updateHud();
+        buddySay(pickLine(BUDDY_OOPS), "oops");
+        setTimeout(()=>{ a.open=b.open=false; flipped=[]; lock=false; animBackPair=[i1,i2]; renderBoard(); loseLife("Those cards did not match."); }, 700);
       }
     }
     function loseLife(msg){
@@ -247,6 +334,7 @@
       timeLeft=sec; timerDisplay.classList.remove("urgent"); timerDisplay.textContent="Timer: "+timeLeft;
       timer=setInterval(()=>{
         timeLeft--;
+        if(timeLeft===10 && !hurrySaid){ hurrySaid=true; buddySay("Hurry — you can do it!", "cheer"); }
         if(timeLeft<=5){ timerDisplay.classList.add("urgent"); playSound("tick"); }
         timerDisplay.textContent="Timer: "+(timeLeft<10?"0":"")+Math.max(timeLeft,0);
         if(timeLeft<=0){ clearInterval(timer); roundActive=false; loseLife("Time is up!"); if(lives>0){ roundActive=true; deal(); } }
@@ -257,6 +345,7 @@
     function goHome(){ stopTimer(); roundActive=false; playScreen.classList.add("hidden"); startScreen.classList.remove("hidden"); }
     function endGame(msg){ stopTimer(); if(score>=CHAMP) celebrate(true); else if(score>=PARTY) celebrate(false); playSfx("fanfare"); const award=awardHubProgress(score); const awardText = award.xp>0 ? " You earned "+award.xp+" XP"+(award.stars>0?" and "+award.stars+" star"+(award.stars===1?"":"s"):"")+" for your 103 Arcade hub profile!" : ""; showOverlay({ title: score>=CHAMP?"Champion!":"FlipMatch over!", message:(msg?msg+" ":"")+"You scored "+score+" point"+(score===1?"":"s")+"."+awardText+" Add your name to the leaderboard.", button:"Save score", askName:true, onContinue:goHome }); }
     document.getElementById("play").onclick=startRound;
+    document.getElementById("treasure-btn").onclick=function(){ treasureEl.classList.add("hidden"); showOverlay({ title:"Board clear!", message:"Nice matching. Ready for another board?", button:"Next board", onContinue:function(){ roundActive=true; deal(); } }); };
     clearLbBtn.onclick=()=>{ confirmEl.classList.remove("hidden"); };
     document.getElementById("confirm-no").onclick=()=>confirmEl.classList.add("hidden");
     document.getElementById("confirm-yes").onclick=()=>{ leaderboard=[]; localStorage.removeItem("flipmatch_lb"); renderLeaderboard(); confirmEl.classList.add("hidden"); };
