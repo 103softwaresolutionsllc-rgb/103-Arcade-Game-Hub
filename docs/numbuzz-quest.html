@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <title>Number Quest — NumBuzz Math World, by 103 Software Solutions LLC</title>
+  <link rel="icon" href="numbuzz.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    /* Number Quest: adventure map + sprite battles over the NumBuzz engine. */
+    .quest-hero { position: relative; border-radius: 16px; overflow: hidden; margin-bottom: .8rem; }
+    .quest-hero img.bg { width: 100%; height: 190px; object-fit: cover; display: block; }
+    .quest-hero .shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,20,14,.05), rgba(6,20,14,.78)); }
+    .quest-hero .hero-text { position: absolute; left: 1rem; right: 1rem; bottom: .7rem; color: #fff; }
+    .quest-hero h2 { margin: 0 0 .15rem; font-size: 1.45rem; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+    .quest-hero p { margin: 0; opacity: .92; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+    .quest-stats { display: flex; gap: .9rem; flex-wrap: wrap; margin: .4rem 0 .2rem; font-weight: 800; }
+    .quest-stats .xp { color: #ffd23f; } .quest-stats .stars { color: #ffe97a; }
+    .path { display: flex; flex-direction: column; gap: .55rem; margin-top: .6rem; }
+    .path-node { display: flex; align-items: center; gap: .7rem; text-align: left; width: 88%; }
+    .path-node:nth-child(even) { align-self: flex-end; flex-direction: row-reverse; text-align: right; }
+    .node-dot { flex: 0 0 auto; width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; font-weight: 900; background: #274b63; color: #fff; border: 3px solid rgba(255,255,255,.35); position: relative; }
+    .path-node.done .node-dot { background: #2e9e5b; border-color: #b7ffc9; }
+    .path-node.current .node-dot { background: #ffb300; border-color: #fff2b0; color: #3a2700; animation: pulse 1.4s ease-in-out infinite; }
+    .path-node.locked { opacity: .45; }
+    .path-node .node-meta { min-width: 0; }
+    .path-node .node-name { font-weight: 900; font-size: 1.02rem; }
+    .path-node .node-sub { font-size: .82rem; opacity: .85; }
+    .hero-token { width: 44px; height: auto; filter: drop-shadow(0 3px 5px rgba(0,0,0,.5)); animation: buddyBob 2.6s ease-in-out infinite; }
+    .grade-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .5rem; margin-top: .6rem; }
+    /* Battle */
+    .stage { position: relative; border-radius: 16px; overflow: hidden; background: #0d2b1d; }
+    .stage img.bg { width: 100%; height: 250px; object-fit: cover; display: block; opacity: .9; }
+    .stage .shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,20,14,.12), rgba(6,20,14,.55)); }
+    .sprite-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: .8rem; }
+    .sprite { position: relative; width: 148px; height: 124px; border-radius: 50% 50% 46% 46%; box-shadow: inset -14px -18px 0 rgba(0,0,0,.18), 0 14px 24px rgba(0,0,0,.35); animation: buddyBob 3s ease-in-out infinite; }
+    .sprite .eye { position: absolute; top: 40px; width: 26px; height: 32px; background: #fff; border-radius: 50%; }
+    .sprite .eye:after { content: ""; position: absolute; left: 7px; top: 10px; width: 12px; height: 14px; background: #20242a; border-radius: 50%; }
+    .sprite .eye.l { left: 34px; } .sprite .eye.r { right: 34px; }
+    .sprite .mouth { position: absolute; left: 50%; bottom: 26px; width: 44px; height: 20px; margin-left: -22px; border: 4px solid rgba(20,20,30,.75); border-top: 0; border-left-color: transparent; border-right-color: transparent; border-radius: 0 0 44px 44px; }
+    .sprite.hit { animation: spriteHit .45s ease; }
+    .sprite.down { animation: none; transform: rotate(86deg) translateY(16px); opacity: .7; transition: transform .6s ease, opacity .6s ease; }
+    @keyframes spriteHit { 18% { transform: translateX(-10px) rotate(-5deg); filter: brightness(1.7); } 45% { transform: translateX(9px) rotate(4deg); } 70% { transform: translateX(-5px); } }
+    .hp-row { display: flex; gap: .3rem; margin-top: .55rem; }
+    .hp-pip { width: 22px; height: 10px; border-radius: 99px; background: #ff5d5d; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+    .hp-pip.gone { background: rgba(255,255,255,.25); box-shadow: none; }
+    .sprite-name { color: #fff; font-weight: 900; text-shadow: 0 2px 6px rgba(0,0,0,.7); margin-top: .35rem; }
+    .prompt-bubble { background: #fff; color: #17341f; border-radius: 16px; padding: .8rem 1rem; font-weight: 900; font-size: 1.5rem; text-align: center; margin: .7rem 0 .4rem; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+    .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: .45rem; max-width: 340px; margin: .4rem auto 0; }
+    .keypad button { font-size: 1.25rem; font-weight: 900; padding: .65rem 0; }
+    .answer-display { max-width: 340px; margin: 0 auto; background: rgba(255,255,255,.12); border: 2px dashed rgba(255,255,255,.4); border-radius: 12px; min-height: 52px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; font-weight: 900; color: #ffd23f; letter-spacing: .06em; }
+    .hearts { font-size: 1.15rem; letter-spacing: .15em; }
+    .lesson-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; width: 100%; margin: .3rem 0; text-align: left; }
+    .lesson-row .lr-meta { font-size: .82rem; opacity: .85; }
+    /* Buddy + combo (shared game-feel kit) */
+    .buddy { display: flex; align-items: flex-end; gap: .55rem; margin: .5rem 0 .15rem; }
+    .buddy img { height: 84px; width: auto; filter: drop-shadow(0 4px 6px rgba(0,0,0,.35)); animation: buddyBob 2.6s ease-in-out infinite; }
+    .buddy.cheer img { animation: buddyJump .55s ease; }
+    .buddy.oops img { animation: buddyNudge .4s ease; }
+    @keyframes buddyBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @keyframes buddyJump { 30% { transform: translateY(-16px) rotate(-3deg); } 65% { transform: translateY(0); } }
+    @keyframes buddyNudge { 25% { transform: translateX(-5px) rotate(-2deg); } 75% { transform: translateX(5px) rotate(2deg); } }
+    .bubble { background: #fff; color: #17341f; border-radius: 14px; padding: .45rem .7rem; font-weight: 700; line-height: 1.25; box-shadow: 0 3px 10px rgba(0,0,0,.25); position: relative; max-width: 78%; }
+    .bubble:after { content: ""; position: absolute; left: -7px; bottom: 14px; border: 8px solid transparent; border-right-color: #fff; border-left: 0; }
+    .combo { display: flex; align-items: center; gap: .5rem; margin: .3rem 0 .1rem; }
+    .combo > span { font-weight: 900; color: #ffd23f; text-shadow: 0 2px 0 rgba(0,0,0,.4); letter-spacing: .03em; white-space: nowrap; }
+    .combo-track { flex: 1; height: 10px; background: rgba(255,255,255,.18); border-radius: 99px; overflow: hidden; }
+    .combo-fill { height: 100%; width: 0; background: linear-gradient(90deg, #ffd23f, #ff7b00, #ff3d00); transition: width .3s ease; }
+    .float-score { position: absolute; top: 10px; right: 14px; font-weight: 900; font-size: 1.4rem; color: #ffdf3a; text-shadow: 0 2px 0 rgba(0,0,0,.5); animation: floatUp .9s ease-out forwards; pointer-events: none; z-index: 3; }
+    @media (prefers-reduced-motion: reduce) { .buddy img, .buddy.cheer img, .buddy.oops img, .sprite, .hero-token, .path-node.current .node-dot { animation: none; } .sprite.hit { animation-duration: .01s; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-row">
+          <img src="numbuzz.svg" class="bee-mark" alt="">
+          <div>
+            <h1>Number Quest</h1>
+            <p class="wq-sub">NumBuzz · Math World</p>
+          </div>
+        </div>
+        <p class="byline">Built by 103 Software Solutions LLC</p>
+      </div>
+      <div class="topbar-actions">
+        <a class="btn secondary hub-link" href="index.html">103 Arcade</a>
+        <button id="mute" class="icon-btn" type="button" aria-label="Mute sounds" title="Mute sounds">🔊</button>
+      </div>
+    </div>
+
+    <section id="grade-screen" class="card hidden" aria-label="Choose grade">
+      <h2 style="margin-top:0;">Pick your math level</h2>
+      <p class="howto">Choose your grade to open your quest map. You can change it later in classic NumBuzz.</p>
+      <div class="grade-grid" id="grade-grid"></div>
+    </section>
+
+    <section id="map-screen" class="card hidden" aria-label="Quest map">
+      <div class="quest-hero">
+        <img class="bg" src="assets/worlds/math/backgrounds/math-scene-master.webp" alt="">
+        <div class="shade"></div>
+        <div class="hero-text">
+          <h2 id="world-name">Math World</h2>
+          <p id="world-focus"></p>
+          <div class="quest-stats">
+            <span class="xp" id="stat-xp">✦ 0 XP</span>
+            <span class="stars" id="stat-stars">★ 0</span>
+            <span id="stat-progress"></span>
+          </div>
+        </div>
+      </div>
+      <p class="howto">Follow the path, Explorer. Clear each stop to unlock the next — every lesson is a battle against a Number Sprite!</p>
+      <div class="path" id="path"></div>
+      <div class="actions" style="margin-top:.8rem;">
+        <button id="change-grade" class="btn secondary" type="button">Change grade</button>
+        <a class="btn secondary" href="numbuzz.html">Classic NumBuzz (parents &amp; placement)</a>
+      </div>
+    </section>
+
+    <section id="battle-screen" class="card hidden" aria-label="Battle">
+      <div class="hud">
+        <div class="score" id="score">Score: 0</div>
+        <div class="hearts" id="hearts"></div>
+      </div>
+      <div class="streak" id="streak"></div>
+      <div class="combo hidden" id="combo"><span id="combo-label">COMBO ×2</span><div class="combo-track"><div class="combo-fill" id="combo-fill"></div></div></div>
+      <div class="level-badge" id="level-badge">Battle</div>
+      <div class="stage" id="stage">
+        <img class="bg" src="assets/worlds/math/backgrounds/math-scene-master.webp" alt="">
+        <div class="shade"></div>
+        <div class="sprite-wrap">
+          <div class="sprite" id="sprite">
+            <div class="eye l"></div><div class="eye r"></div><div class="mouth"></div>
+          </div>
+          <div class="hp-row" id="hp-row"></div>
+          <div class="sprite-name" id="sprite-name">Number Sprite</div>
+        </div>
+      </div>
+      <div class="buddy" id="buddy">
+        <img id="buddy-img" src="assets/hub/player-hero.png" alt="Your Explorer buddy">
+        <div class="bubble" id="buddy-bubble">Defeat the sprite — answer to attack!</div>
+      </div>
+      <div class="prompt-bubble" id="prompt">?</div>
+      <div id="choices" class="choice-grid"></div>
+      <div id="keypad-wrap" class="hidden">
+        <div class="answer-display" id="answer-display"> </div>
+        <div class="keypad" id="keypad"></div>
+      </div>
+      <div class="actions">
+        <button id="speak" class="btn secondary" type="button">Speak</button>
+        <button id="hint" class="btn secondary hidden" type="button">Ask coach for a hint</button>
+        <button id="quit-battle" class="btn secondary" type="button">Back to map</button>
+      </div>
+    </section>
+
+    <footer class="site-footer">
+      <img src="logo.png" alt="103 Software Solutions LLC">
+      <p>&copy; 2026 Number Quest. Built by <strong>103 Software Solutions LLC</strong>. All Rights Reserved.</p>
+    </footer>
+  </div>
+
+  <div id="lesson-overlay" class="overlay hidden" role="dialog"><div class="overlay-card">
+    <h2 id="lesson-title"></h2>
+    <div id="lesson-list"></div>
+    <div class="actions"><button id="lesson-close" class="btn secondary" type="button">Close</button></div>
+  </div></div>
+
+  <div id="end-overlay" class="overlay hidden" role="dialog"><div class="overlay-card">
+    <h2 id="end-title"></h2><p id="end-msg"></p>
+    <div class="actions">
+      <button id="end-map" class="btn" type="button">Back to map</button>
+      <button id="end-retry" class="btn secondary" type="button">Play again</button>
+    </div>
+  </div></div>
+
+  <div id="celebrate" aria-hidden="true"></div>
+  <audio id="snd-correct" src="sounds/correct.mp3" preload="auto"></audio>
+  <audio id="snd-wrong" src="sounds/wrong.mp3" preload="auto"></audio>
+
+  <script src="numbuzz-content.js"></script>
+  <script src="numbuzz-engine.js"></script>
+  <script src="arcade-ai.js"></script>
+  <script>
+(function () {
+  "use strict";
+  const Engine = window.NBEngine;
+  const Content = window.NBContent;
+  const $ = function (id) { return document.getElementById(id); };
+  const gradeScreen = $("grade-screen"), mapScreen = $("map-screen"), battleScreen = $("battle-screen");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  let profile = Engine.loadProfile();
+  let worldId = Engine.worldIdForGrade(profile.gradeBand || 1);
+  let battle = null;
+  let muted = localStorage.getItem("numbuzz_mute") === "1";
+
+  /* ---------- sound (same kit as sibling games) ---------- */
+  let audioCtx = null;
+  function getCtx() { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; if (!audioCtx) audioCtx = new C(); if (audioCtx.state === "suspended") audioCtx.resume(); return audioCtx; }
+  function tone(f, d, t, g, s) { if (muted) return; try { const ctx = getCtx(); if (!ctx) return; const now = ctx.currentTime + (s || 0); const o = ctx.createOscillator(), gn = ctx.createGain(); o.type = t || "sine"; o.frequency.setValueAtTime(f, now); gn.gain.setValueAtTime(g || 0.07, now); gn.gain.exponentialRampToValueAtTime(0.001, now + d); o.connect(gn); gn.connect(ctx.destination); o.start(now); o.stop(now + d); } catch (e) {} }
+  function playMp3(id, v) { if (muted) return; const el = $(id); try { el.volume = v == null ? 1 : v; el.currentTime = 0; const p = el.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {} }
+  function playSfx(k) { if (muted) return; if (k === "click") tone(880, 0.05, "triangle", 0.05); else if (k === "sparkle") { tone(784, 0.1, "sine", 0.06); tone(1174, 0.16, "sine", 0.07, 0.1); } else if (k === "fanfare") { tone(523, 0.12, "square", 0.05); tone(784, 0.2, "square", 0.05, 0.14); } else if (k === "hit") { tone(196, 0.12, "sawtooth", 0.06); tone(392, 0.1, "square", 0.05, 0.05); } }
+  function playSound(n) { if (n === "correct") { playMp3("snd-correct", 0.85); playSfx("hit"); if (battle && battle.streak >= 3) playSfx("sparkle"); } else if (n === "wrong") { playMp3("snd-wrong", 0.45); tone(140, 0.2, "sawtooth", 0.05); } }
+  const muteBtn = $("mute");
+  function updateMuteUi() { muteBtn.textContent = muted ? "🔇" : "🔊"; }
+  muteBtn.onclick = function () { muted = !muted; localStorage.setItem("numbuzz_mute", muted ? "1" : "0"); updateMuteUi(); };
+  updateMuteUi();
+
+  function celebrate(big) {
+    if (reduceMotion) return;
+    const colors = ["#ff8c00", "#ffff00", "#32cd32", "#00ffff", "#ff00ff"];
+    const el = $("celebrate");
+    el.replaceChildren();
+    for (let i = 0; i < (big ? 16 : 10); i++) { const r = document.createElement("span"); r.className = "streamer"; r.style.left = (4 + i * 6) + "%"; r.style.height = 40 + Math.random() * 24 + "vh"; r.style.background = "linear-gradient(180deg," + colors[i % colors.length] + ",transparent)"; el.appendChild(r); }
+    for (let i = 0; i < (big ? 80 : 40); i++) { const b = document.createElement("span"); b.className = "party-confetti"; b.style.left = Math.random() * 100 + "%"; b.style.background = colors[i % colors.length]; b.style.setProperty("--drift", (Math.random() * 160 - 80) + "px"); el.appendChild(b); }
+    playSfx(big ? "fanfare" : "sparkle");
+    setTimeout(function () { el.replaceChildren(); }, big ? 4500 : 3000);
+  }
+
+  /* ---------- buddy ---------- */
+  const buddyEl = $("buddy"), buddyBubble = $("buddy-bubble");
+  const PRAISE = ["Direct hit!", "You crunched that number!", "Sprite is wobbling!", "Math power!"];
+  const COMBO = ["Combo blast!", "Unstoppable Explorer!", "The sprite can't keep up!"];
+  const OOPS = ["Ouch — that one hurt!", "Shake it off, Explorer!", "The sprite got a lucky bonk!"];
+  function pickLine(a) { return a[Math.floor(Math.random() * a.length)]; }
+  let buddyTimer = null;
+  function buddySay(text, mood) {
+    if (buddyBubble) buddyBubble.textContent = text;
+    if (!buddyEl) return;
+    buddyEl.classList.remove("cheer", "oops");
+    if (mood) { void buddyEl.offsetWidth; buddyEl.classList.add(mood); }
+    if (buddyTimer) clearTimeout(buddyTimer);
+    if (mood) buddyTimer = setTimeout(function () { buddyEl.classList.remove("cheer", "oops"); }, 950);
+  }
+
+  /* ---------- screens ---------- */
+  function show(screen) {
+    [gradeScreen, mapScreen, battleScreen].forEach(function (s) { s.classList.add("hidden"); });
+    screen.classList.remove("hidden");
+  }
+
+  /* ---------- grade ---------- */
+  function renderGrade() {
+    const grid = $("grade-grid");
+    grid.replaceChildren();
+    (Content.GRADE_BANDS || []).forEach(function (band) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn grade-btn" + (profile.gradeBand === band.grade && profile.gradeBandSet ? " active" : "");
+      b.textContent = (band.label || ("Grade " + band.grade)) + (band.name ? " · " + band.name : "");
+      b.onclick = function () {
+        Engine.setGradeBand(profile, band.grade);
+        Engine.saveProfile(profile);
+        worldId = Engine.worldIdForGrade(profile.gradeBand || 1);
+        renderMap();
+      };
+      grid.appendChild(b);
+    });
+    show(gradeScreen);
+  }
+  $("change-grade").onclick = function () { renderGrade(); };
+
+  /* ---------- map ---------- */
+  const SPRITE_HUES = [152, 210, 265, 20, 330, 185, 95, 240, 45, 285];
+  function renderMap() {
+    profile = Engine.loadProfile();
+    const world = Content.getWorld(worldId);
+    if (!world) { renderGrade(); return; }
+    $("world-name").textContent = (world.icon ? world.icon + " " : "") + world.name;
+    $("world-focus").textContent = world.focus || "";
+    $("stat-xp").textContent = "✦ " + (profile.xp || 0) + " XP";
+    $("stat-stars").textContent = "★ " + (profile.stars || 0);
+    const nodes = Engine.getPathNodes(worldId);
+    const doneCount = Engine.countWorldNodesDone(profile, worldId);
+    $("stat-progress").textContent = doneCount + " / " + nodes.length + " stops cleared";
+    const path = $("path");
+    path.replaceChildren();
+    let currentMarked = false;
+    nodes.forEach(function (entry) {
+      const node = entry.node;
+      const key = worldId + ":" + node.id;
+      const done = !!profile.nodesCompleted[key];
+      const unlocked = Engine.nodeUnlocked(profile, worldId, node.id, entry.worldIndex, { pathStartIndex: 0 });
+      const isCurrent = unlocked && !done && !currentMarked;
+      if (isCurrent) currentMarked = true;
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "btn path-node" + (done ? " done" : isCurrent ? " current" : unlocked ? "" : " locked");
+      const dot = document.createElement("span");
+      dot.className = "node-dot";
+      dot.textContent = done ? "✓" : unlocked ? String(entry.worldIndex + 1) : "🔒";
+      const meta = document.createElement("span");
+      meta.className = "node-meta";
+      const nm = document.createElement("div");
+      nm.className = "node-name";
+      nm.textContent = node.name;
+      const sub = document.createElement("div");
+      sub.className = "node-sub";
+      const doneLessons = node.lessons.filter(function (l) { return profile.lessonsCompleted[key + ":" + l.id]; }).length;
+      sub.textContent = (node.blurb ? node.blurb + " · " : "") + doneLessons + "/" + node.lessons.length + " battles won";
+      meta.appendChild(nm); meta.appendChild(sub);
+      row.appendChild(dot); row.appendChild(meta);
+      if (isCurrent) {
+        const tok = document.createElement("img");
+        tok.className = "hero-token";
+        tok.src = "assets/hub/player-hero.png";
+        tok.alt = "You are here";
+        row.appendChild(tok);
+      }
+      row.disabled = !unlocked;
+      if (unlocked) row.onclick = function () { playSfx("click"); openNode(node); };
+      path.appendChild(row);
+    });
+    show(mapScreen);
+  }
+
+  /* ---------- node lesson picker ---------- */
+  function openNode(node) {
+    $("lesson-title").textContent = node.name;
+    const list = $("lesson-list");
+    list.replaceChildren();
+    node.lessons.forEach(function (lesson) {
+      const done = !!profile.lessonsCompleted[worldId + ":" + node.id + ":" + lesson.id];
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn lesson-row";
+      const left = document.createElement("span");
+      left.textContent = (done ? "✓ " : "⚔ ") + lesson.title;
+      const right = document.createElement("span");
+      right.className = "lr-meta";
+      const r = lesson.reward || { xp: 15, stars: 1 };
+      right.textContent = "+" + r.xp + " XP · ★" + r.stars;
+      b.appendChild(left); b.appendChild(right);
+      b.onclick = function () { $("lesson-overlay").classList.add("hidden"); startBattle(node, lesson); };
+      list.appendChild(b);
+    });
+    $("lesson-overlay").classList.remove("hidden");
+  }
+  $("lesson-close").onclick = function () { $("lesson-overlay").classList.add("hidden"); };
+
+  /* ---------- battle ---------- */
+  const spriteEl = $("sprite"), hpRow = $("hp-row"), promptEl = $("prompt"), choicesEl = $("choices");
+  const keypadWrap = $("keypad-wrap"), answerDisplay = $("answer-display"), keypadEl = $("keypad");
+  let lastBattle = null;
+  function act() { return battle ? battle.lesson.activities[battle.idx] : null; }
+
+  function startBattle(node, lesson) {
+    battle = { node: node, lesson: lesson, idx: 0, hearts: 3, streak: 0, points: 0, typed: "", hintUsed: false, busy: false };
+    lastBattle = { node: node, lesson: lesson };
+    $("level-badge").textContent = node.name + " · " + lesson.title;
+    const nodes = Engine.getPathNodes(worldId);
+    const ni = nodes.findIndex(function (e) { return e.node.id === node.id; });
+    const hue = SPRITE_HUES[Math.max(0, ni) % SPRITE_HUES.length];
+    spriteEl.style.background = "radial-gradient(circle at 35% 30%, hsl(" + hue + ",85%,72%), hsl(" + hue + ",70%,45%))";
+    $("sprite-name").textContent = "Number Sprite of " + node.name;
+    spriteEl.classList.remove("down");
+    buddySay("Defeat the sprite — every right answer is a hit!", null);
+    show(battleScreen);
+    renderBattle();
+  }
+
+  function renderHearts() { $("hearts").textContent = "💛".repeat(battle.hearts) + "🖤".repeat(Math.max(0, 3 - battle.hearts)); }
+  function renderHp() {
+    hpRow.replaceChildren();
+    const total = battle.lesson.activities.length;
+    for (let i = 0; i < total; i++) { const p = document.createElement("span"); p.className = "hp-pip" + (i < battle.idx ? " gone" : ""); hpRow.appendChild(p); }
+  }
+  function renderCombo() {
+    const c = $("combo");
+    c.classList.toggle("hidden", battle.streak < 2);
+    if (battle.streak >= 2) { $("combo-label").textContent = "COMBO ×" + battle.streak; $("combo-fill").style.width = Math.min(100, 20 + battle.streak * 16) + "%"; }
+    $("streak").textContent = battle.streak >= 2 ? "Streak: " + battle.streak : "";
+  }
+  function renderBattle() {
+    const a = act();
+    if (!a) return;
+    renderHearts(); renderHp(); renderCombo();
+    $("score").textContent = "Score: " + battle.points;
+    promptEl.textContent = a.prompt;
+    battle.typed = "";
+    battle.hintUsed = false;
+    $("hint").classList.add("hidden");
+    choicesEl.replaceChildren();
+    if (a.options && a.options.length) {
+      keypadWrap.classList.add("hidden");
+      a.options.forEach(function (opt) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn choice-btn";
+        b.textContent = opt;
+        b.onclick = function () { judge(opt); };
+        choicesEl.appendChild(b);
+      });
+    } else {
+      keypadWrap.classList.remove("hidden");
+      answerDisplay.textContent = " ";
+      buildKeypad();
+    }
+  }
+  function buildKeypad() {
+    keypadEl.replaceChildren();
+    ["1", "2", "3", "4", "5", "6", "7", "8", "9", "−", "0", "⌫"].forEach(function (k) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn secondary";
+      b.textContent = k;
+      b.onclick = function () {
+        if (!battle || battle.busy) return;
+        if (k === "⌫") battle.typed = battle.typed.slice(0, -1);
+        else if (k === "−") battle.typed = battle.typed.indexOf("-") === 0 ? battle.typed.slice(1) : "-" + battle.typed;
+        else if (battle.typed.replace("-", "").length < 6) battle.typed += k;
+        answerDisplay.textContent = battle.typed || " ";
+        playSfx("click");
+      };
+      keypadEl.appendChild(b);
+    });
+    const go = document.createElement("button");
+    go.type = "button";
+    go.className = "btn";
+    go.textContent = "Attack!";
+    go.style.gridColumn = "1 / -1";
+    go.onclick = function () { if (battle && battle.typed !== "" && battle.typed !== "-") judge(battle.typed); };
+    keypadEl.appendChild(go);
+  }
+  document.addEventListener("keydown", function (e) {
+    if (!battle || battleScreen.classList.contains("hidden")) return;
+    const a = act();
+    if (!a || (a.options && a.options.length)) return;
+    if (/^[0-9]$/.test(e.key)) { if (battle.typed.replace("-", "").length < 6) battle.typed += e.key; }
+    else if (e.key === "Backspace") battle.typed = battle.typed.slice(0, -1);
+    else if (e.key === "-") battle.typed = battle.typed.indexOf("-") === 0 ? battle.typed.slice(1) : "-" + battle.typed;
+    else if (e.key === "Enter") { if (battle.typed !== "" && battle.typed !== "-") judge(battle.typed); return; }
+    else return;
+    answerDisplay.textContent = battle.typed || " ";
+  });
+
+  function judge(value) {
+    if (!battle || battle.busy) return;
+    const a = act();
+    if (!a) return;
+    const result = Engine.evaluateActivity(a, value);
+    if (result.correct) {
+      battle.busy = true;
+      battle.streak++;
+      const gain = 10 + (battle.streak >= 3 ? 5 : 0);
+      battle.points += gain;
+      playSound("correct");
+      spriteEl.classList.remove("hit"); void spriteEl.offsetWidth; spriteEl.classList.add("hit");
+      const pop = document.createElement("span");
+      pop.className = "float-score"; pop.textContent = "+" + gain;
+      $("stage").appendChild(pop);
+      setTimeout(function () { pop.remove(); }, 950);
+      buddySay(battle.streak >= 3 ? pickLine(COMBO) : pickLine(PRAISE), "cheer");
+      battle.idx++;
+      renderHearts(); renderHp(); renderCombo();
+      $("score").textContent = "Score: " + battle.points;
+      setTimeout(function () {
+        if (!battle) return;
+        battle.busy = false;
+        if (battle.idx >= battle.lesson.activities.length) victory();
+        else renderBattle();
+      }, 700);
+    } else {
+      battle.hearts--;
+      battle.streak = 0;
+      playSound("wrong");
+      buddySay(result.message + " " + pickLine(OOPS), "oops");
+      renderHearts(); renderCombo();
+      if (!battle.hintUsed) $("hint").classList.remove("hidden");
+      if (battle.hearts <= 0) {
+        battle.busy = true;
+        setTimeout(defeat, 900);
+      }
+    }
+  }
+
+  function victory() {
+    spriteEl.classList.add("down");
+    celebrate(true);
+    const lessonKey = worldId + ":" + battle.node.id + ":" + battle.lesson.id;
+    Engine.applyReward(profile, battle.lesson.reward, { lessonKey: lessonKey, streak: battle.streak });
+    const mastered = Engine.markNodeCompleteIfReady(profile, worldId, battle.node.id);
+    Engine.saveProfile(profile);
+    const r = battle.lesson.reward || { xp: 15, stars: 1 };
+    $("end-title").textContent = "Sprite defeated!";
+    $("end-msg").textContent = "You won the battle of " + battle.lesson.title + " with " + battle.points + " points! Reward: +" + r.xp + " XP and ★" + r.stars + "." + (mastered ? " You mastered " + battle.node.name + " — the path ahead is open!" : "");
+    $("end-retry").textContent = "Battle again";
+    $("end-overlay").classList.remove("hidden");
+    battle = null;
+  }
+  function defeat() {
+    if (!battle) return;
+    $("end-title").textContent = "The sprite got away…";
+    $("end-msg").textContent = "Great fighting, Explorer! Sprites are tough — heal up and challenge " + battle.lesson.title + " again. Practice makes the hero.";
+    $("end-retry").textContent = "Try again";
+    $("end-overlay").classList.remove("hidden");
+    battle = null;
+  }
+  $("end-map").onclick = function () { $("end-overlay").classList.add("hidden"); renderMap(); };
+  $("end-retry").onclick = function () { $("end-overlay").classList.add("hidden"); if (lastBattle) startBattle(lastBattle.node, lastBattle.lesson); else renderMap(); };
+  $("quit-battle").onclick = function () { battle = null; renderMap(); };
+  $("speak").onclick = function () {
+    const a = act();
+    if (!a || !window.speechSynthesis) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(a.speak || a.prompt);
+    u.rate = 0.85; u.lang = "en-US";
+    speechSynthesis.speak(u);
+  };
+  $("hint").onclick = function () {
+    if (!battle) return;
+    battle.hintUsed = true;
+    $("hint").classList.add("hidden");
+    buddySay("Coach is thinking…", null);
+    const fallback = "Coach says: break it into smaller pieces — count on, group the numbers, or draw it out!";
+    try {
+      if (window.ArcadeAI && typeof window.ArcadeAI.hint === "function") {
+        window.ArcadeAI.hint("math", "stuck", profile, act()).then(function (res) {
+          buddySay(res && res.ok && res.message ? res.message : fallback, null);
+        }).catch(function () { buddySay(fallback, null); });
+      } else buddySay(fallback, null);
+    } catch (e) { buddySay(fallback, null); }
+  };
+
+  /* ---------- boot ---------- */
+  if (profile.gradeBandSet) {
+    worldId = Engine.worldIdForGrade(profile.gradeBand || 1);
+    renderMap();
+  } else {
+    renderGrade();
+  }
+})();
+  </script>
+</body>
+</html>
