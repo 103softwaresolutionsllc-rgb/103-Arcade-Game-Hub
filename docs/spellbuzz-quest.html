@@ -213,6 +213,11 @@
   updateMuteUi();
   if (window.ArcadeAssets && window.ArcadeAssets.load) window.ArcadeAssets.load();
 
+  if (window.speechSynthesis) {
+    const primeVoices = function () { try { window.speechSynthesis.getVoices(); window.speechSynthesis.resume(); } catch (e) {} document.removeEventListener("pointerdown", primeVoices); };
+    document.addEventListener("pointerdown", primeVoices);
+  }
+
   function celebrate(big) {
     if (reduceMotion) return;
     const colors = ["#ff8c00", "#ffff00", "#32cd32", "#00ffff", "#ff00ff"];
@@ -372,7 +377,7 @@
   let lastDuel = null;
   function act() { return duel ? duel.lesson.activities[duel.idx] : null; }
   function shuffle(a) { const c = a.slice(); for (let i = c.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = c[i]; c[i] = c[j]; c[j] = t; } return c; }
-  function speak(text, a) {
+  function speakViaAssets(text, a) {
     if (!text || muted) return;
     const opts = a || {};
     if (window.ArcadeAssets && typeof window.ArcadeAssets.playVoice === "function") {
@@ -479,6 +484,58 @@
       chips.appendChild(b);
     });
   }
+
+  /* Recorded read-along for passages: story/sentence texts have no single
+     clip, so play the recorded word clips in sequence (the library was
+     recorded for exactly these sight-word passages). Falls back to the
+     normal voice path when too few words have recordings. */
+  let voiceIndexPromise = null;
+  function voiceIndex() {
+    if (!voiceIndexPromise) {
+      voiceIndexPromise = fetch("assets/manifests/voice-script.json").then(function (r) { return r.json(); }).then(function (data) {
+        const clips = Array.isArray(data) ? data : (data.clips || []);
+        const idx = {};
+        clips.forEach(function (c) { if (c && c.id && c.path) idx[c.id] = c.path; });
+        return idx;
+      }).catch(function () { return {}; });
+    }
+    return voiceIndexPromise;
+  }
+  function slugWord(raw) {
+    let s = String(raw || "").trim().toLowerCase();
+    if (s === "they're" || s === "they\u2019re") return "theyre";
+    return s.replace(/[^a-z0-9]/g, "");
+  }
+  let passageAudio = null;
+  function stopPassage() { if (passageAudio) { try { passageAudio.pause(); } catch (e) {} passageAudio = null; } }
+  const STEM_RE = /^(find the letter|build the word|spell:?|what letter starts|the sound|which letter makes the sound)\b/i;
+  function isPassageText(text) { const t = String(text || "").trim(); return /\s/.test(t) && !STEM_RE.test(t); }
+  function playPassage(text, a) {
+    voiceIndex().then(function (idx) {
+      const words = String(text).split(/\s+/).map(slugWord).filter(Boolean);
+      const urls = [];
+      words.forEach(function (w) { const p = idx["word-" + w]; if (p) urls.push(String(p).replace(/^\//, "")); });
+      if (urls.length < 3 || urls.length < words.length * 0.6) { speakViaAssets(text, a); return; }
+      if (window.ArcadeAssets && window.ArcadeAssets.stopVoice) window.ArcadeAssets.stopVoice();
+      let i = 0;
+      const next = function () {
+        if (i >= urls.length) { passageAudio = null; return; }
+        const el = new Audio(urls[i++]);
+        passageAudio = el;
+        el.onended = next;
+        el.onerror = next;
+        try { const pr = el.play(); if (pr && pr.catch) pr.catch(next); } catch (e) { next(); }
+      };
+      next();
+    });
+  }
+
+  function speak(text, a) {
+    if (!text || muted) return;
+    stopPassage();
+    if (isPassageText(text)) { playPassage(text, a); return; }
+    speakViaAssets(text, a);
+  }
   $("cast").onclick = function () { if (duel && built.length) judge(built.join("")); };
   $("clear-build").onclick = function () { built = []; renderBuild(); };
   document.addEventListener("keydown", function (e) {
@@ -583,7 +640,7 @@
   }
   $("end-map").onclick = function () { $("end-overlay").classList.add("hidden"); renderMap(); };
   $("end-retry").onclick = function () { $("end-overlay").classList.add("hidden"); if (lastDuel) startDuel(lastDuel.node, lastDuel.lesson); else renderMap(); };
-  $("quit-duel").onclick = function () { duel = null; if (window.ArcadeAssets && window.ArcadeAssets.stopVoice) window.ArcadeAssets.stopVoice(); if (window.speechSynthesis) speechSynthesis.cancel(); renderMap(); };
+  $("quit-duel").onclick = function () { duel = null; stopPassage(); if (window.ArcadeAssets && window.ArcadeAssets.stopVoice) window.ArcadeAssets.stopVoice(); if (window.speechSynthesis) speechSynthesis.cancel(); renderMap(); };
   $("speak").onclick = function () { const a = act(); if (a) speak(a.speak || a.prompt, a); };
   $("hint").onclick = function () {
     if (!duel) return;
