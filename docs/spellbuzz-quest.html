@@ -374,7 +374,7 @@
   function shuffle(a) { const c = a.slice(); for (let i = c.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = c[i]; c[i] = c[j]; c[j] = t; } return c; }
   function speak(text, a) {
     if (!text || muted) return;
-    const opts = a ? { type: a.type, skill: a.skill } : {};
+    const opts = a || {};
     if (window.ArcadeAssets && typeof window.ArcadeAssets.playVoice === "function") {
       const run = function () { window.ArcadeAssets.playVoice(text, opts); };
       if (window.ArcadeAssets.load) window.ArcadeAssets.load().then(run);

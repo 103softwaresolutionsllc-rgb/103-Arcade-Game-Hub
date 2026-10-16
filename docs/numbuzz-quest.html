@@ -555,7 +555,7 @@ spriteEl.innerHTML = window.ArcadeSprites.create({ seed: worldId + ":" + node.id
   $("quit-battle").onclick = function () { battle = null; renderMap(); };
   function speakSmart(text, a) {
     if (!text || muted) return;
-    const opts = a ? { type: a.type, skill: a.skill } : {};
+    const opts = a || {};
     if (window.ArcadeAssets && typeof window.ArcadeAssets.playVoice === "function") {
       const run = function () { window.ArcadeAssets.playVoice(text, opts); };
       if (window.ArcadeAssets.load) window.ArcadeAssets.load().then(run);

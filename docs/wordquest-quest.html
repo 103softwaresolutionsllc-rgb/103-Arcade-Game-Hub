@@ -614,7 +614,7 @@
   $("quit-scene").onclick = function () { scene = null; renderMap(); };
   function speakSmart(text, a) {
     if (!text || muted) return;
-    const opts = a ? { type: a.type, skill: a.skill } : {};
+    const opts = a || {};
     if (window.ArcadeAssets && typeof window.ArcadeAssets.playVoice === "function") {
       const run = function () { window.ArcadeAssets.playVoice(text, opts); };
       if (window.ArcadeAssets.load) window.ArcadeAssets.load().then(run);
