@@ -45,6 +45,18 @@
     .path-node.boss-row.done .node-dot { background: #b8860b; border-color: #ffe9a3; }
     .boss-row .node-name { color: #ffb3b3; }
     .boss-row.done .node-name { color: inherit; }
+    .stage { height: 330px; }
+    .stage img.bg { height: 330px; }
+    .sprite-wrap { align-items: flex-end; padding-right: 5%; }
+    .j-dots { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+    .j-dot { position: absolute; width: 15px; height: 15px; margin: -7px 0 0 -7px; border-radius: 50%; background: rgba(255,255,255,.35); border: 2.5px solid rgba(255,255,255,.85); box-shadow: 0 2px 5px rgba(0,0,0,.4); }
+    .j-dot.done { background: #2e9e5b; }
+    .j-dot.next { background: #ffb300; animation: pulse 1.2s ease-in-out infinite; }
+    .j-explorer { position: absolute; z-index: 3; width: 56px; height: auto; margin-left: -28px; transform: translateY(-96%); filter: drop-shadow(0 5px 6px rgba(0,0,0,.5)); transition: left .65s ease, top .65s ease; pointer-events: none; }
+    .prompt-bubble { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: min(88%, 430px); max-height: 128px; overflow-y: auto; z-index: 4; margin: 0; }
+    .prompt-bubble:after { content: ""; position: absolute; left: 50%; bottom: -9px; margin-left: -9px; border: 9px solid transparent; border-top-color: #fff; border-bottom: 0; }
+    .prompt-bubble.shake { animation: bubbleShake .4s ease; }
+    @keyframes bubbleShake { 20% { transform: translateX(calc(-50% - 7px)); } 45% { transform: translateX(calc(-50% + 6px)); } 70% { transform: translateX(calc(-50% - 4px)); } }
     .hp-row { display: flex; gap: .3rem; margin-top: .55rem; }
     .hp-pip { width: 22px; height: 10px; border-radius: 99px; background: #c39bff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
     .hp-pip.gone { background: rgba(255,255,255,.25); box-shadow: none; }
@@ -129,6 +141,9 @@
       <div class="stage" id="stage">
         <img class="bg" src="assets/worlds/spelling/backgrounds/spelling-scene-master.webp" alt="">
         <div class="shade"></div>
+        <div class="j-dots" id="j-dots"></div>
+        <img class="j-explorer" id="j-explorer" src="assets/hub/player-hero.png" alt="">
+        <div class="prompt-bubble" id="prompt">?</div>
         <div class="sprite-wrap">
           <div class="sprite-art" id="sprite-art"></div>
           <div class="hp-row" id="hp-row"></div>
@@ -139,7 +154,6 @@
         <img id="buddy-img" src="assets/hub/player-hero.png" alt="Your Explorer buddy">
         <div class="bubble" id="buddy-bubble">Cast the right spelling to zap the sprite!</div>
       </div>
-      <div class="prompt-bubble" id="prompt">?</div>
       <div id="choices" class="choice-grid"></div>
       <div id="build-wrap" class="hidden">
         <div id="build-tray" class="sentence-tray" aria-live="polite"></div>
@@ -405,6 +419,7 @@
     buddySay("Cast the right spelling to zap the sprite!", null);
     show(duelScreen);
     renderDuel();
+    renderJourney(duel);
   }
 
   function renderHearts() { $("hearts").textContent = "💛".repeat(duel.hearts) + "🖤".repeat(Math.max(0, 3 - duel.hearts)); }
@@ -517,10 +532,13 @@
       words.forEach(function (w) { const p = idx["word-" + w]; if (p) urls.push(String(p).replace(/^\//, "")); });
       if (urls.length < 3 || urls.length < words.length * 0.6) { speakViaAssets(text, a); return; }
       if (window.ArcadeAssets && window.ArcadeAssets.stopVoice) window.ArcadeAssets.stopVoice();
+      // Preload the whole sequence up front so clip-to-clip network waits
+      // don't chop the read-along into gappy pieces on a phone connection.
+      const els = urls.map(function (u) { const el = new Audio(); el.preload = "auto"; el.src = u; return el; });
       let i = 0;
       const next = function () {
-        if (i >= urls.length) { passageAudio = null; return; }
-        const el = new Audio(urls[i++]);
+        if (i >= els.length) { passageAudio = null; return; }
+        const el = els[i++];
         passageAudio = el;
         el.onended = next;
         el.onerror = next;
@@ -551,6 +569,37 @@
     else if (e.key === "Enter") { if (built.length) judge(built.join("")); }
   });
 
+
+  /* ---------- journey: explorer walks the path, challenge in the bubble ---------- */
+  function dotPos(i, n) {
+    const t = n <= 1 ? 0 : i / (n - 1);
+    return { x: 7 + 58 * t, y: 76 - 13 * Math.sin(t * Math.PI) };
+  }
+  function renderJourney(state) {
+    const dots = $("j-dots");
+    if (!dots || !state) return;
+    dots.replaceChildren();
+    const total = state.lesson.activities.length;
+    for (let i = 0; i < total; i++) {
+      const p = dotPos(i, total);
+      const d = document.createElement("span");
+      d.className = "j-dot" + (i < state.idx ? " done" : i === state.idx ? " next" : "");
+      d.style.left = p.x + "%";
+      d.style.top = p.y + "%";
+      dots.appendChild(d);
+    }
+    moveExplorer(state, false);
+  }
+  function moveExplorer(state, toSprite) {
+    const el = $("j-explorer");
+    if (!el || !state) return;
+    const total = state.lesson.activities.length;
+    if (toSprite) { el.style.left = "76%"; el.style.top = "70%"; return; }
+    const p = dotPos(Math.min(state.idx, total - 1), total);
+    el.style.left = p.x + "%";
+    el.style.top = p.y + "%";
+  }
+
   function judge(value) {
     if (!duel || duel.busy) return;
     const a = act();
@@ -569,6 +618,8 @@
       setTimeout(function () { pop.remove(); }, 950);
       buddySay(duel.streak >= 3 ? pickLine(COMBO) : pickLine(PRAISE), "cheer");
       duel.idx++;
+      moveExplorer(duel, duel.idx >= duel.lesson.activities.length);
+      renderJourney(duel);
       renderHearts(); renderHp(); renderCombo();
       $("score").textContent = "Score: " + duel.points;
       setTimeout(function () {
@@ -582,6 +633,7 @@
       duel.streak = 0;
       playSound("wrong");
       buddySay(result.message + " " + pickLine(OOPS), "oops");
+      promptEl.classList.remove("shake"); void promptEl.offsetWidth; promptEl.classList.add("shake");
       renderHearts(); renderCombo();
       if (!duel.hintUsed) $("hint").classList.remove("hidden");
       if (duel.hearts <= 0) {

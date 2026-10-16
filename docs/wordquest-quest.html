@@ -30,6 +30,20 @@
     .hero-token { width: 44px; height: auto; filter: drop-shadow(0 3px 5px rgba(0,0,0,.5)); animation: buddyBob 2.6s ease-in-out infinite; }
     .grade-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .5rem; margin-top: .6rem; }
     /* Story scene */
+    .journey { position: relative; border-radius: 18px; overflow: hidden; margin: 10px 0 12px; box-shadow: 0 8px 20px rgba(20,40,20,.35); height: 300px; }
+    .journey img.bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .journey .shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,25,15,.05), rgba(10,25,15,.35)); }
+    .j-dots { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+    .j-dot { position: absolute; width: 15px; height: 15px; margin: -7px 0 0 -7px; border-radius: 50%; background: rgba(255,255,255,.35); border: 2.5px solid rgba(255,255,255,.85); box-shadow: 0 2px 5px rgba(0,0,0,.4); }
+    .j-dot.done { background: #2e9e5b; }
+    .j-dot.next { background: #ffb300; animation: pulse 1.2s ease-in-out infinite; }
+    .j-explorer { position: absolute; z-index: 3; width: 56px; height: auto; margin-left: -28px; transform: translateY(-96%); filter: drop-shadow(0 5px 6px rgba(0,0,0,.5)); transition: left .65s ease, top .65s ease; pointer-events: none; }
+    .journey img.companion { position: absolute; z-index: 3; width: 46px; height: auto; margin: 0; transform: translateY(-100%); filter: drop-shadow(0 4px 5px rgba(0,0,0,.45)); transition: left .65s ease, top .65s ease; pointer-events: none; }
+    .journey #scene-sprite { position: absolute; right: 5%; bottom: 8%; width: 118px; z-index: 2; }
+    .book { position: relative; }
+    .book:after { content: ""; position: absolute; left: 50%; top: -9px; margin-left: -9px; border: 9px solid transparent; border-bottom-color: #ffeec4; border-top: 0; }
+    .book.shake { animation: bookShake .4s ease; }
+    @keyframes bookShake { 20% { transform: translateX(-7px); } 45% { transform: translateX(6px); } 70% { transform: translateX(-4px); } }
     .book { position: relative; display: flex; gap: .8rem; background: linear-gradient(160deg, #fff8e6, #ffeec4); color: #33302a; border-radius: 14px; padding: .9rem; box-shadow: inset 0 0 0 3px #e8c97a, 0 8px 20px rgba(0,0,0,.3); }
     .book.turn { animation: pageTurn .5s ease; }
     @keyframes pageTurn { 30% { transform: rotateX(7deg) scale(.985); filter: brightness(1.12); } }
@@ -134,9 +148,15 @@
       <div class="level-badge" id="level-badge">Chapter</div>
       <div class="page-row" id="page-row"></div>
       <div class="scene-wrap" id="scene-wrap">
-        <div class="book" id="book">
-          <img class="companion" src="assets/hub/companion-hero.png" alt="Your story companion">
+        <div class="journey" id="journey">
+          <img class="bg" id="journey-bg" src="" alt="">
+          <div class="shade"></div>
+          <div class="j-dots" id="j-dots"></div>
+          <img class="j-explorer" id="j-explorer" src="assets/hub/player-hero.png" alt="">
+          <img class="companion" id="j-companion" src="assets/hub/companion-hero.png" alt="Your story companion">
           <div id="scene-sprite" aria-hidden="true"></div>
+        </div>
+        <div class="book" id="book">
           <div class="page">
             <div class="scene-kicker" id="scene-kicker">Story time</div>
             <div class="scene-text" id="scene-text"></div>
@@ -403,6 +423,7 @@
     buddySay("A new page of the story — let's read!", null);
     show(sceneScreen);
     renderScene();
+    renderJourney();
   }
 
   function renderHearts() { $("hearts").textContent = "💛".repeat(scene.hearts) + "🖤".repeat(Math.max(0, 3 - scene.hearts)); }
@@ -516,6 +537,40 @@
   $("clear-build").onclick = function () { built = []; renderBuild(); };
   $("read-it").onclick = function () { judge(true); };
 
+
+  /* ---------- journey: explorer + fox walk the path, story in the bubble ---------- */
+  function dotPos(i, n) {
+    const t = n <= 1 ? 0 : i / (n - 1);
+    return { x: 7 + 58 * t, y: 76 - 13 * Math.sin(t * Math.PI) };
+  }
+  function renderJourney() {
+    const dots = $("j-dots");
+    if (!dots || !scene) return;
+    $("journey-bg").src = "assets/worlds/reading/backgrounds/reading-scene-master.webp";
+    dots.replaceChildren();
+    const total = scene.lesson.activities.length;
+    for (let i = 0; i < total; i++) {
+      const p = dotPos(i, total);
+      const d = document.createElement("span");
+      d.className = "j-dot" + (i < scene.idx ? " done" : i === scene.idx ? " next" : "");
+      d.style.left = p.x + "%";
+      d.style.top = p.y + "%";
+      dots.appendChild(d);
+    }
+    moveExplorer(false);
+  }
+  function moveExplorer(toSprite) {
+    const el = $("j-explorer"), fox = $("j-companion");
+    if (!el || !scene) return;
+    const total = scene.lesson.activities.length;
+    let x, y;
+    if (toSprite) { x = 70; y = 74; }
+    else { const p = dotPos(Math.min(scene.idx, total - 1), total); x = p.x; y = p.y; }
+    el.style.left = x + "%";
+    el.style.top = y + "%";
+    if (fox) { fox.style.left = "calc(" + x + "% - 58px)"; fox.style.top = y + "%"; }
+  }
+
   function judge(value) {
     if (!scene || scene.busy) return;
     const a = act();
@@ -536,6 +591,8 @@
       buddySay(scene.streak >= 3 ? pickLine(COMBO) : pickLine(PRAISE), "cheer");
       sceneSpriteReact("cheer");
       scene.idx++;
+      moveExplorer(scene.idx >= scene.lesson.activities.length);
+      renderJourney();
       renderHearts(); renderPages(); renderCombo();
       $("score").textContent = "Score: " + scene.points;
       setTimeout(function () {
@@ -549,6 +606,7 @@
       scene.streak = 0;
       playSound("wrong");
       buddySay(result.message + " " + pickLine(OOPS), "oops");
+      book.classList.remove("shake"); void book.offsetWidth; book.classList.add("shake");
       sceneSpriteReact("oops");
       renderHearts(); renderCombo();
       if (!scene.hintUsed) $("hint").classList.remove("hidden");
@@ -665,10 +723,13 @@
       words.forEach(function (w) { const p = idx["word-" + w]; if (p) urls.push(String(p).replace(/^\//, "")); });
       if (urls.length < 3 || urls.length < words.length * 0.6) { speakViaAssets(text, a); return; }
       if (window.ArcadeAssets && window.ArcadeAssets.stopVoice) window.ArcadeAssets.stopVoice();
+      // Preload the whole sequence up front so clip-to-clip network waits
+      // don't chop the read-along into gappy pieces on a phone connection.
+      const els = urls.map(function (u) { const el = new Audio(); el.preload = "auto"; el.src = u; return el; });
       let i = 0;
       const next = function () {
-        if (i >= urls.length) { passageAudio = null; return; }
-        const el = new Audio(urls[i++]);
+        if (i >= els.length) { passageAudio = null; return; }
+        const el = els[i++];
         passageAudio = el;
         el.onended = next;
         el.onerror = next;

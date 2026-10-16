@@ -63,3 +63,20 @@ classic pages' contract (evaluate → reward with lessonKey → mark node
 complete → save), a scripted playthrough of a full lesson battle in a DOM
 harness, and a local serve check. No page replaces its classic until it
 passes; classics remain in the repo as fallback.
+
+## Phase 3 — Journey mode (Isaac's map-and-bubble direction, Oct 16)
+Isaac's correction: don't teleport the player from a menu into a separate
+battle screen. The player stands ON the map; the challenge appears in a
+bubble at the stop; solve it and the character walks to the next stop.
+- All three quest games: the play screen is now a journey scene — world
+  art backdrop, a dotted path with one stop per challenge, the Explorer
+  token (with the fox alongside in Story Quest) that walks stop to stop
+  on every correct answer, the creature waiting at the path's end, and
+  the challenge presented in a speech bubble (math/spelling prompt, or
+  the storybook panel in Story Quest). Wrong answers shake the bubble.
+- Boss battles use the same journey with the crowned boss at the end.
+- Speech: story read-along now preloads the whole recorded-word sequence
+  up front so phone network waits don't chop it into gappy pieces.
+Verified: scripted journeys in all three games (dots == challenges,
+explorer advances per solve, victory + save), full playthrough + boss +
+voice regressions all pass.
