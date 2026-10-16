@@ -30,7 +30,7 @@
     .hero-token { width: 44px; height: auto; filter: drop-shadow(0 3px 5px rgba(0,0,0,.5)); animation: buddyBob 2.6s ease-in-out infinite; }
     .grade-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .5rem; margin-top: .6rem; }
     /* Story scene */
-    .book { display: flex; gap: .8rem; background: linear-gradient(160deg, #fff8e6, #ffeec4); color: #33302a; border-radius: 14px; padding: .9rem; box-shadow: inset 0 0 0 3px #e8c97a, 0 8px 20px rgba(0,0,0,.3); }
+    .book { position: relative; display: flex; gap: .8rem; background: linear-gradient(160deg, #fff8e6, #ffeec4); color: #33302a; border-radius: 14px; padding: .9rem; box-shadow: inset 0 0 0 3px #e8c97a, 0 8px 20px rgba(0,0,0,.3); }
     .book.turn { animation: pageTurn .5s ease; }
     @keyframes pageTurn { 30% { transform: rotateX(7deg) scale(.985); filter: brightness(1.12); } }
     .book .companion { flex: 0 0 auto; width: 92px; height: auto; align-self: flex-end; filter: drop-shadow(0 4px 6px rgba(0,0,0,.25)); animation: buddyBob 3.2s ease-in-out infinite; }
@@ -38,6 +38,16 @@
     .book .scene-kicker { font-size: .78rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: #9a6b1f; margin-bottom: .3rem; }
     .book .scene-text { font-size: 1.28rem; line-height: 1.5; font-weight: 600; }
     .book .scene-question { margin-top: .6rem; font-size: 1.05rem; font-weight: 900; color: #5b3a8e; }
+    #scene-sprite { position: absolute; top: 10px; right: 12px; width: 66px; pointer-events: none; }
+    #scene-sprite svg { width: 100%; height: auto; display: block; filter: drop-shadow(0 4px 6px rgba(0,0,0,.25)); }
+    #scene-sprite.boss { width: 118px; }
+    #scene-sprite.cheer svg { animation: buddyJump .55s ease; }
+    #scene-sprite.oops svg { animation: buddyNudge .4s ease; }
+    .path-node.boss-row { width: 72%; margin: -.1rem auto 0; border: 2px dashed rgba(255,92,92,.7); }
+    .boss-dot { background: #8e2323; border-color: #ffb3b3; }
+    .path-node.boss-row.done .node-dot { background: #b8860b; border-color: #ffe9a3; }
+    .boss-row .node-name { color: #ffb3b3; }
+    .boss-row.done .node-name { color: inherit; }
     .page-row { display: flex; gap: .3rem; margin: .55rem 0 .1rem; }
     .page-pip { width: 22px; height: 10px; border-radius: 99px; background: #b388ff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
     .page-pip.gone { background: rgba(255,255,255,.25); box-shadow: none; }
@@ -126,6 +136,7 @@
       <div class="scene-wrap" id="scene-wrap">
         <div class="book" id="book">
           <img class="companion" src="assets/hub/companion-hero.png" alt="Your story companion">
+          <div id="scene-sprite" aria-hidden="true"></div>
           <div class="page">
             <div class="scene-kicker" id="scene-kicker">Story time</div>
             <div class="scene-text" id="scene-text"></div>
@@ -185,6 +196,7 @@
 
   <script src="wordquest-content.js"></script>
   <script src="wordquest-engine.js"></script>
+  <script src="quest-kit.js"></script>
   <script src="arcade-ai.js"></script>
   <script>
 (function () {
@@ -316,6 +328,29 @@
       row.disabled = !unlocked;
       if (unlocked) row.onclick = function () { playSfx("click"); openNode(node); };
       path.appendChild(row);
+      if (done) {
+        const boss = window.ArcadeBoss.forNode(Engine, worldId, node, "reading", entry.worldIndex);
+        const clearedMap = (profile.engagement && profile.engagement.bossesCleared) || {};
+        const cleared = !!clearedMap[worldId + ":" + node.id];
+        const brow = document.createElement("button");
+        brow.type = "button";
+        brow.className = "btn path-node boss-row" + (cleared ? " done" : "");
+        const bdot = document.createElement("span");
+        bdot.className = "node-dot boss-dot";
+        bdot.textContent = cleared ? "👑" : (boss.emoji || "🐉");
+        const bmeta = document.createElement("span");
+        bmeta.className = "node-meta";
+        const bnm = document.createElement("div");
+        bnm.className = "node-name";
+        bnm.textContent = "BOSS · " + boss.title;
+        const bsub = document.createElement("div");
+        bsub.className = "node-sub";
+        bsub.textContent = cleared ? "Cleared — tap to rematch!" : (boss.blurb || "Mastery challenge!");
+        bmeta.appendChild(bnm); bmeta.appendChild(bsub);
+        brow.appendChild(bdot); brow.appendChild(bmeta);
+        brow.onclick = function () { playSfx("click"); startBossScene(node, boss); };
+        path.appendChild(brow);
+      }
     });
     show(mapScreen);
   }
@@ -355,6 +390,9 @@
     lastScene = { node: node, lesson: lesson };
     built = [];
     $("level-badge").textContent = node.name + " · " + lesson.title;
+    const ssEl = $("scene-sprite");
+    ssEl.innerHTML = window.ArcadeSprites.create({ seed: worldId + ":" + node.id, boss: false });
+    ssEl.classList.remove("boss");
     buddySay("A new page of the story — let's read!", null);
     show(sceneScreen);
     renderScene();
@@ -489,6 +527,7 @@
       $("scene-wrap").appendChild(pop);
       setTimeout(function () { pop.remove(); }, 950);
       buddySay(scene.streak >= 3 ? pickLine(COMBO) : pickLine(PRAISE), "cheer");
+      sceneSpriteReact("cheer");
       scene.idx++;
       renderHearts(); renderPages(); renderCombo();
       $("score").textContent = "Score: " + scene.points;
@@ -503,6 +542,7 @@
       scene.streak = 0;
       playSound("wrong");
       buddySay(result.message + " " + pickLine(OOPS), "oops");
+      sceneSpriteReact("oops");
       renderHearts(); renderCombo();
       if (!scene.hintUsed) $("hint").classList.remove("hidden");
       if (scene.hearts <= 0) {
@@ -512,8 +552,42 @@
     }
   }
 
+  function sceneSpriteReact(mood) {
+    const el = $("scene-sprite");
+    if (!el) return;
+    el.classList.remove("cheer", "oops");
+    void el.offsetWidth;
+    el.classList.add(mood);
+    setTimeout(function () { el.classList.remove(mood); }, 700);
+  }
+
+  function startBossScene(node, boss) {
+    const pseudo = { id: "boss-" + node.id, title: boss.title, reward: boss.reward || { xp: 20, stars: 2 }, activities: boss.activities || [] };
+    startScene(node, pseudo);
+    if (!scene) return;
+    scene.isBoss = true;
+    scene.boss = boss;
+    const ss = $("scene-sprite");
+    ss.innerHTML = window.ArcadeSprites.create({ seed: worldId + ":" + node.id, boss: true });
+    ss.classList.add("boss");
+    $("level-badge").textContent = "👑 GUARDIAN · " + node.name;
+    buddySay(boss.blurb || "Mastery challenge — show what you know!", null);
+  }
+
   function victory() {
     celebrate(true);
+    if (scene.isBoss || scene.lesson.id.indexOf("boss-") === 0) {
+      Engine.applyReward(profile, scene.lesson.reward, { streak: scene.streak });
+      Engine.clearBoss(profile, worldId, scene.node.id);
+      Engine.saveProfile(profile);
+      const rb = scene.lesson.reward || { xp: 20, stars: 2 };
+      $("end-title").textContent = "👑 Guardian defeated!";
+      $("end-msg").textContent = "You out-read " + scene.lesson.title + " with " + scene.points + " points! Reward: +" + rb.xp + " XP and ★" + rb.stars + ". The story celebrates its champion!";
+      $("end-retry").textContent = "Face the guardian again";
+      $("end-overlay").classList.remove("hidden");
+      scene = null;
+      return;
+    }
     const lessonKey = worldId + ":" + scene.node.id + ":" + scene.lesson.id;
     Engine.applyReward(profile, scene.lesson.reward, { lessonKey: lessonKey, streak: scene.streak });
     const mastered = Engine.markNodeCompleteIfReady(profile, worldId, scene.node.id);

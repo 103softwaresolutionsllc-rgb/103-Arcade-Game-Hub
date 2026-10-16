@@ -34,14 +34,17 @@
     .stage img.bg { width: 100%; height: 250px; object-fit: cover; display: block; opacity: .9; }
     .stage .shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,20,14,.12), rgba(6,20,14,.55)); }
     .sprite-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: .8rem; }
-    .sprite { position: relative; width: 148px; height: 124px; border-radius: 50% 50% 46% 46%; box-shadow: inset -14px -18px 0 rgba(0,0,0,.18), 0 14px 24px rgba(0,0,0,.35); animation: buddyBob 3s ease-in-out infinite; }
-    .sprite .eye { position: absolute; top: 40px; width: 26px; height: 32px; background: #fff; border-radius: 50%; }
-    .sprite .eye:after { content: ""; position: absolute; left: 7px; top: 10px; width: 12px; height: 14px; background: #20242a; border-radius: 50%; }
-    .sprite .eye.l { left: 34px; } .sprite .eye.r { right: 34px; }
-    .sprite .mouth { position: absolute; left: 50%; bottom: 26px; width: 44px; height: 20px; margin-left: -22px; border: 4px solid rgba(20,20,30,.75); border-top: 0; border-left-color: transparent; border-right-color: transparent; border-radius: 0 0 44px 44px; }
-    .sprite.hit { animation: spriteHit .45s ease; }
-    .sprite.down { animation: none; transform: rotate(86deg) translateY(16px); opacity: .7; transition: transform .6s ease, opacity .6s ease; }
+    .sprite-art { width: 152px; }
+    .sprite-art svg { width: 100%; height: auto; display: block; filter: drop-shadow(0 12px 16px rgba(0,0,0,.4)); animation: buddyBob 3s ease-in-out infinite; }
+    .sprite-art.boss { width: 218px; }
+    .sprite-art.hit svg { animation: spriteHit .45s ease; }
+    .sprite-art.down svg { animation: none; transform: rotate(80deg) translateY(16px); opacity: .65; transition: transform .6s ease, opacity .6s ease; }
     @keyframes spriteHit { 18% { transform: translateX(-10px) rotate(-5deg); filter: brightness(1.7); } 45% { transform: translateX(9px) rotate(4deg); } 70% { transform: translateX(-5px); } }
+    .path-node.boss-row { width: 72%; margin: -.1rem auto 0; border: 2px dashed rgba(255,92,92,.7); }
+    .boss-dot { background: #8e2323; border-color: #ffb3b3; }
+    .path-node.boss-row.done .node-dot { background: #b8860b; border-color: #ffe9a3; }
+    .boss-row .node-name { color: #ffb3b3; }
+    .boss-row.done .node-name { color: inherit; }
     .hp-row { display: flex; gap: .3rem; margin-top: .55rem; }
     .hp-pip { width: 22px; height: 10px; border-radius: 99px; background: #ff5d5d; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
     .hp-pip.gone { background: rgba(255,255,255,.25); box-shadow: none; }
@@ -130,9 +133,7 @@
         <img class="bg" src="assets/worlds/math/backgrounds/math-scene-master.webp" alt="">
         <div class="shade"></div>
         <div class="sprite-wrap">
-          <div class="sprite" id="sprite">
-            <div class="eye l"></div><div class="eye r"></div><div class="mouth"></div>
-          </div>
+          <div class="sprite-art" id="sprite-art"></div>
           <div class="hp-row" id="hp-row"></div>
           <div class="sprite-name" id="sprite-name">Number Sprite</div>
         </div>
@@ -180,6 +181,7 @@
 
   <script src="numbuzz-content.js"></script>
   <script src="numbuzz-engine.js"></script>
+  <script src="quest-kit.js"></script>
   <script src="arcade-ai.js"></script>
   <script>
 (function () {
@@ -311,6 +313,29 @@
       row.disabled = !unlocked;
       if (unlocked) row.onclick = function () { playSfx("click"); openNode(node); };
       path.appendChild(row);
+      if (done) {
+        const boss = window.ArcadeBoss.forNode(Engine, worldId, node, "math", entry.worldIndex);
+        const clearedMap = (profile.engagement && profile.engagement.bossesCleared) || {};
+        const cleared = !!clearedMap[worldId + ":" + node.id];
+        const brow = document.createElement("button");
+        brow.type = "button";
+        brow.className = "btn path-node boss-row" + (cleared ? " done" : "");
+        const bdot = document.createElement("span");
+        bdot.className = "node-dot boss-dot";
+        bdot.textContent = cleared ? "👑" : (boss.emoji || "🐉");
+        const bmeta = document.createElement("span");
+        bmeta.className = "node-meta";
+        const bnm = document.createElement("div");
+        bnm.className = "node-name";
+        bnm.textContent = "BOSS · " + boss.title;
+        const bsub = document.createElement("div");
+        bsub.className = "node-sub";
+        bsub.textContent = cleared ? "Cleared — tap to rematch!" : (boss.blurb || "Mastery challenge!");
+        bmeta.appendChild(bnm); bmeta.appendChild(bsub);
+        brow.appendChild(bdot); brow.appendChild(bmeta);
+        brow.onclick = function () { playSfx("click"); startBoss(node, boss); };
+        path.appendChild(brow);
+      }
     });
     show(mapScreen);
   }
@@ -340,7 +365,7 @@
   $("lesson-close").onclick = function () { $("lesson-overlay").classList.add("hidden"); };
 
   /* ---------- battle ---------- */
-  const spriteEl = $("sprite"), hpRow = $("hp-row"), promptEl = $("prompt"), choicesEl = $("choices");
+  const spriteEl = $("sprite-art"), hpRow = $("hp-row"), promptEl = $("prompt"), choicesEl = $("choices");
   const keypadWrap = $("keypad-wrap"), answerDisplay = $("answer-display"), keypadEl = $("keypad");
   let lastBattle = null;
   function act() { return battle ? battle.lesson.activities[battle.idx] : null; }
@@ -352,8 +377,9 @@
     const nodes = Engine.getPathNodes(worldId);
     const ni = nodes.findIndex(function (e) { return e.node.id === node.id; });
     const hue = SPRITE_HUES[Math.max(0, ni) % SPRITE_HUES.length];
-    spriteEl.style.background = "radial-gradient(circle at 35% 30%, hsl(" + hue + ",85%,72%), hsl(" + hue + ",70%,45%))";
-    $("sprite-name").textContent = "Number Sprite of " + node.name;
+spriteEl.innerHTML = window.ArcadeSprites.create({ seed: worldId + ":" + node.id, boss: false });
+    spriteEl.classList.remove("boss");
+    $("sprite-name").textContent = window.ArcadeSprites.name(worldId + ":" + node.id) + " of " + node.name;
     spriteEl.classList.remove("down");
     buddySay("Defeat the sprite — every right answer is a hit!", null);
     show(battleScreen);
@@ -475,9 +501,34 @@
     }
   }
 
+  function startBoss(node, boss) {
+    const pseudo = { id: "boss-" + node.id, title: boss.title, reward: boss.reward || { xp: 20, stars: 2 }, activities: boss.activities || [] };
+    startBattle(node, pseudo);
+    if (!battle) return;
+    battle.isBoss = true;
+    battle.boss = boss;
+    spriteEl.innerHTML = window.ArcadeSprites.create({ seed: worldId + ":" + node.id, boss: true });
+    spriteEl.classList.add("boss");
+    $("sprite-name").textContent = boss.title;
+    $("level-badge").textContent = "👑 BOSS · " + node.name;
+    buddySay(boss.blurb || "Mastery challenge — show what you know!", null);
+  }
+
   function victory() {
     spriteEl.classList.add("down");
     celebrate(true);
+    if (battle.isBoss || battle.lesson.id.indexOf("boss-") === 0) {
+      Engine.applyReward(profile, battle.lesson.reward, { streak: battle.streak });
+      Engine.clearBoss(profile, worldId, battle.node.id);
+      Engine.saveProfile(profile);
+      const rb = battle.lesson.reward || { xp: 20, stars: 2 };
+      $("end-title").textContent = "👑 Boss cleared!";
+      $("end-msg").textContent = "You defeated " + battle.lesson.title + " with " + battle.points + " points! Reward: +" + rb.xp + " XP and ★" + rb.stars + ". The kingdom celebrates its champion!";
+      $("end-retry").textContent = "Rematch the boss";
+      $("end-overlay").classList.remove("hidden");
+      battle = null;
+      return;
+    }
     const lessonKey = worldId + ":" + battle.node.id + ":" + battle.lesson.id;
     Engine.applyReward(profile, battle.lesson.reward, { lessonKey: lessonKey, streak: battle.streak });
     const mastered = Engine.markNodeCompleteIfReady(profile, worldId, battle.node.id);
