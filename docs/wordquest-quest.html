@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <title>Story Quest — WordQuest Reading World, by 103 Software Solutions LLC</title>
+  <link rel="icon" href="wordquest.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    /* Story Quest: chapter map + story scenes over the WordQuest engine. */
+    .quest-hero { position: relative; border-radius: 16px; overflow: hidden; margin-bottom: .8rem; }
+    .quest-hero img.bg { width: 100%; height: 190px; object-fit: cover; display: block; }
+    .quest-hero .shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,20,14,.05), rgba(6,20,14,.78)); }
+    .quest-hero .hero-text { position: absolute; left: 1rem; right: 1rem; bottom: .7rem; color: #fff; }
+    .quest-hero h2 { margin: 0 0 .15rem; font-size: 1.45rem; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+    .quest-hero p { margin: 0; opacity: .92; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+    .quest-stats { display: flex; gap: .9rem; flex-wrap: wrap; margin: .4rem 0 .2rem; font-weight: 800; }
+    .quest-stats .xp { color: #ffd23f; } .quest-stats .stars { color: #ffe97a; }
+    .path { display: flex; flex-direction: column; gap: .55rem; margin-top: .6rem; }
+    .path-node { display: flex; align-items: center; gap: .7rem; text-align: left; width: 88%; }
+    .path-node:nth-child(even) { align-self: flex-end; flex-direction: row-reverse; text-align: right; }
+    .node-dot { flex: 0 0 auto; width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; font-weight: 900; background: #5b3a8e; color: #fff; border: 3px solid rgba(255,255,255,.35); position: relative; }
+    .path-node.done .node-dot { background: #2e9e5b; border-color: #b7ffc9; }
+    .path-node.current .node-dot { background: #ffb300; border-color: #fff2b0; color: #3a2700; animation: pulse 1.4s ease-in-out infinite; }
+    .path-node.locked { opacity: .45; }
+    .path-node .node-meta { min-width: 0; }
+    .path-node .node-name { font-weight: 900; font-size: 1.02rem; }
+    .path-node .node-sub { font-size: .82rem; opacity: .85; }
+    .hero-token { width: 44px; height: auto; filter: drop-shadow(0 3px 5px rgba(0,0,0,.5)); animation: buddyBob 2.6s ease-in-out infinite; }
+    .grade-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .5rem; margin-top: .6rem; }
+    /* Story scene */
+    .book { display: flex; gap: .8rem; background: linear-gradient(160deg, #fff8e6, #ffeec4); color: #33302a; border-radius: 14px; padding: .9rem; box-shadow: inset 0 0 0 3px #e8c97a, 0 8px 20px rgba(0,0,0,.3); }
+    .book.turn { animation: pageTurn .5s ease; }
+    @keyframes pageTurn { 30% { transform: rotateX(7deg) scale(.985); filter: brightness(1.12); } }
+    .book .companion { flex: 0 0 auto; width: 92px; height: auto; align-self: flex-end; filter: drop-shadow(0 4px 6px rgba(0,0,0,.25)); animation: buddyBob 3.2s ease-in-out infinite; }
+    .book .page { flex: 1; min-width: 0; }
+    .book .scene-kicker { font-size: .78rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: #9a6b1f; margin-bottom: .3rem; }
+    .book .scene-text { font-size: 1.28rem; line-height: 1.5; font-weight: 600; }
+    .book .scene-question { margin-top: .6rem; font-size: 1.05rem; font-weight: 900; color: #5b3a8e; }
+    .page-row { display: flex; gap: .3rem; margin: .55rem 0 .1rem; }
+    .page-pip { width: 22px; height: 10px; border-radius: 99px; background: #b388ff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+    .page-pip.gone { background: rgba(255,255,255,.25); box-shadow: none; }
+    .hearts { font-size: 1.15rem; letter-spacing: .15em; }
+    .pic-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: .5rem; }
+    .pic-card { display: flex; flex-direction: column; align-items: center; gap: .15rem; padding: .7rem .3rem; font-weight: 900; }
+    .pic-card .pic-emoji { font-size: 2.2rem; line-height: 1.1; }
+    .word-big { font-size: 2.4rem; font-weight: 900; text-align: center; letter-spacing: .04em; margin: .4rem 0; color: #ffd23f; text-shadow: 0 2px 0 rgba(0,0,0,.4); }
+    .lesson-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; width: 100%; margin: .3rem 0; text-align: left; }
+    .lesson-row .lr-meta { font-size: .82rem; opacity: .85; }
+    /* Buddy + combo (shared game-feel kit) */
+    .buddy { display: flex; align-items: flex-end; gap: .55rem; margin: .5rem 0 .15rem; }
+    .buddy img { height: 84px; width: auto; filter: drop-shadow(0 4px 6px rgba(0,0,0,.35)); animation: buddyBob 2.6s ease-in-out infinite; }
+    .buddy.cheer img { animation: buddyJump .55s ease; }
+    .buddy.oops img { animation: buddyNudge .4s ease; }
+    @keyframes buddyBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @keyframes buddyJump { 30% { transform: translateY(-16px) rotate(-3deg); } 65% { transform: translateY(0); } }
+    @keyframes buddyNudge { 25% { transform: translateX(-5px) rotate(-2deg); } 75% { transform: translateX(5px) rotate(2deg); } }
+    .bubble { background: #fff; color: #17341f; border-radius: 14px; padding: .45rem .7rem; font-weight: 700; line-height: 1.25; box-shadow: 0 3px 10px rgba(0,0,0,.25); position: relative; max-width: 78%; }
+    .bubble:after { content: ""; position: absolute; left: -7px; bottom: 14px; border: 8px solid transparent; border-right-color: #fff; border-left: 0; }
+    .combo { display: flex; align-items: center; gap: .5rem; margin: .3rem 0 .1rem; }
+    .combo > span { font-weight: 900; color: #ffd23f; text-shadow: 0 2px 0 rgba(0,0,0,.4); letter-spacing: .03em; white-space: nowrap; }
+    .combo-track { flex: 1; height: 10px; background: rgba(255,255,255,.18); border-radius: 99px; overflow: hidden; }
+    .combo-fill { height: 100%; width: 0; background: linear-gradient(90deg, #ffd23f, #ff7b00, #ff3d00); transition: width .3s ease; }
+    .float-score { position: absolute; top: 10px; right: 14px; font-weight: 900; font-size: 1.4rem; color: #ffdf3a; text-shadow: 0 2px 0 rgba(0,0,0,.5); animation: floatUp .9s ease-out forwards; pointer-events: none; z-index: 3; }
+    .scene-wrap { position: relative; }
+    @media (prefers-reduced-motion: reduce) { .buddy img, .buddy.cheer img, .buddy.oops img, .book .companion, .hero-token, .path-node.current .node-dot, .book.turn { animation: none; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-row">
+          <img src="wordquest.svg" class="bee-mark" alt="">
+          <div>
+            <h1>Story Quest</h1>
+            <p class="wq-sub">WordQuest · Reading World</p>
+          </div>
+        </div>
+        <p class="byline">Built by 103 Software Solutions LLC</p>
+      </div>
+      <div class="topbar-actions">
+        <a class="btn secondary hub-link" href="index.html">103 Arcade</a>
+        <button id="mute" class="icon-btn" type="button" aria-label="Mute sounds" title="Mute sounds">🔊</button>
+      </div>
+    </div>
+
+    <section id="grade-screen" class="card hidden" aria-label="Choose grade">
+      <h2 style="margin-top:0;">Pick your reading level</h2>
+      <p class="howto">Choose your grade to open your story map. You can change it later in classic WordQuest.</p>
+      <div class="grade-grid" id="grade-grid"></div>
+    </section>
+
+    <section id="map-screen" class="card hidden" aria-label="Story map">
+      <div class="quest-hero">
+        <img class="bg" src="assets/worlds/reading/backgrounds/reading-scene-master.webp" alt="">
+        <div class="shade"></div>
+        <div class="hero-text">
+          <h2 id="world-name">Reading World</h2>
+          <p id="world-focus"></p>
+          <div class="quest-stats">
+            <span class="xp" id="stat-xp">✦ 0 XP</span>
+            <span class="stars" id="stat-stars">★ 0</span>
+            <span id="stat-progress"></span>
+          </div>
+        </div>
+      </div>
+      <p class="howto">Your story travels the path, Explorer. Finish each chapter stop to unlock the next part of the tale!</p>
+      <div class="path" id="path"></div>
+      <div class="actions" style="margin-top:.8rem;">
+        <button id="change-grade" class="btn secondary" type="button">Change grade</button>
+        <a class="btn secondary" href="wordquest.html">Classic WordQuest (parents &amp; placement)</a>
+      </div>
+    </section>
+
+    <section id="scene-screen" class="card hidden" aria-label="Story scene">
+      <div class="hud">
+        <div class="score" id="score">Score: 0</div>
+        <div class="hearts" id="hearts"></div>
+      </div>
+      <div class="streak" id="streak"></div>
+      <div class="combo hidden" id="combo"><span id="combo-label">COMBO ×2</span><div class="combo-track"><div class="combo-fill" id="combo-fill"></div></div></div>
+      <div class="level-badge" id="level-badge">Chapter</div>
+      <div class="page-row" id="page-row"></div>
+      <div class="scene-wrap" id="scene-wrap">
+        <div class="book" id="book">
+          <img class="companion" src="assets/hub/companion-hero.png" alt="Your story companion">
+          <div class="page">
+            <div class="scene-kicker" id="scene-kicker">Story time</div>
+            <div class="scene-text" id="scene-text"></div>
+            <div class="scene-question" id="scene-question"></div>
+          </div>
+        </div>
+      </div>
+      <div class="buddy" id="buddy">
+        <img id="buddy-img" src="assets/hub/player-hero.png" alt="Your Explorer buddy">
+        <div class="bubble" id="buddy-bubble">Every page is an adventure!</div>
+      </div>
+      <div id="choices" class="choice-grid" style="margin-top:.5rem;"></div>
+      <div id="build-wrap" class="hidden">
+        <div id="build-tray" class="sentence-tray" aria-live="polite"></div>
+        <div id="build-chips" class="choice-grid"></div>
+        <div class="actions">
+          <button id="check-build" class="btn" type="button">Check</button>
+          <button id="clear-build" class="btn secondary" type="button">Clear</button>
+        </div>
+      </div>
+      <div id="sprint-wrap" class="hidden">
+        <div class="word-big" id="sprint-word"></div>
+        <div class="actions" style="justify-content:center;">
+          <button id="read-it" class="btn" type="button">I read it!</button>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="speak" class="btn secondary" type="button">Speak</button>
+        <button id="hint" class="btn secondary hidden" type="button">Ask coach for a hint</button>
+        <button id="quit-scene" class="btn secondary" type="button">Back to map</button>
+      </div>
+    </section>
+
+    <footer class="site-footer">
+      <img src="logo.png" alt="103 Software Solutions LLC">
+      <p>&copy; 2026 Story Quest. Built by <strong>103 Software Solutions LLC</strong>. All Rights Reserved.</p>
+    </footer>
+  </div>
+
+  <div id="lesson-overlay" class="overlay hidden" role="dialog"><div class="overlay-card">
+    <h2 id="lesson-title"></h2>
+    <div id="lesson-list"></div>
+    <div class="actions"><button id="lesson-close" class="btn secondary" type="button">Close</button></div>
+  </div></div>
+
+  <div id="end-overlay" class="overlay hidden" role="dialog"><div class="overlay-card">
+    <h2 id="end-title"></h2><p id="end-msg"></p>
+    <div class="actions">
+      <button id="end-map" class="btn" type="button">Back to map</button>
+      <button id="end-retry" class="btn secondary" type="button">Read again</button>
+    </div>
+  </div></div>
+
+  <div id="celebrate" aria-hidden="true"></div>
+  <audio id="snd-correct" src="sounds/correct.mp3" preload="auto"></audio>
+  <audio id="snd-wrong" src="sounds/wrong.mp3" preload="auto"></audio>
+
+  <script src="wordquest-content.js"></script>
+  <script src="wordquest-engine.js"></script>
+  <script src="arcade-ai.js"></script>
+  <script>
+(function () {
+  "use strict";
+  const Engine = window.WQEngine;
+  const Content = window.WQContent;
+  const $ = function (id) { return document.getElementById(id); };
+  const gradeScreen = $("grade-screen"), mapScreen = $("map-screen"), sceneScreen = $("scene-screen");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  let profile = Engine.loadProfile();
+  let worldId = Engine.worldIdForGrade(profile.gradeBand || 1);
+  let scene = null;
+  let built = [];
+  let muted = localStorage.getItem("wordquest_mute") === "1";
+
+  /* ---------- sound (same kit as sibling games) ---------- */
+  let audioCtx = null;
+  function getCtx() { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; if (!audioCtx) audioCtx = new C(); if (audioCtx.state === "suspended") audioCtx.resume(); return audioCtx; }
+  function tone(f, d, t, g, s) { if (muted) return; try { const ctx = getCtx(); if (!ctx) return; const now = ctx.currentTime + (s || 0); const o = ctx.createOscillator(), gn = ctx.createGain(); o.type = t || "sine"; o.frequency.setValueAtTime(f, now); gn.gain.setValueAtTime(g || 0.07, now); gn.gain.exponentialRampToValueAtTime(0.001, now + d); o.connect(gn); gn.connect(ctx.destination); o.start(now); o.stop(now + d); } catch (e) {} }
+  function playMp3(id, v) { if (muted) return; const el = $(id); try { el.volume = v == null ? 1 : v; el.currentTime = 0; const p = el.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {} }
+  function playSfx(k) { if (muted) return; if (k === "click") tone(880, 0.05, "triangle", 0.05); else if (k === "sparkle") { tone(784, 0.1, "sine", 0.06); tone(1174, 0.16, "sine", 0.07, 0.1); } else if (k === "fanfare") { tone(523, 0.12, "square", 0.05); tone(784, 0.2, "square", 0.05, 0.14); } else if (k === "page") { tone(520, 0.07, "sine", 0.05); tone(760, 0.09, "sine", 0.05, 0.06); } }
+  function playSound(n) { if (n === "correct") { playMp3("snd-correct", 0.85); playSfx("page"); if (scene && scene.streak >= 3) playSfx("sparkle"); } else if (n === "wrong") { playMp3("snd-wrong", 0.45); tone(140, 0.2, "sawtooth", 0.05); } }
+  const muteBtn = $("mute");
+  function updateMuteUi() { muteBtn.textContent = muted ? "🔇" : "🔊"; }
+  muteBtn.onclick = function () { muted = !muted; localStorage.setItem("wordquest_mute", muted ? "1" : "0"); updateMuteUi(); };
+  updateMuteUi();
+
+  function celebrate(big) {
+    if (reduceMotion) return;
+    const colors = ["#ff8c00", "#ffff00", "#32cd32", "#00ffff", "#ff00ff"];
+    const el = $("celebrate");
+    el.replaceChildren();
+    for (let i = 0; i < (big ? 16 : 10); i++) { const r = document.createElement("span"); r.className = "streamer"; r.style.left = (4 + i * 6) + "%"; r.style.height = 40 + Math.random() * 24 + "vh"; r.style.background = "linear-gradient(180deg," + colors[i % colors.length] + ",transparent)"; el.appendChild(r); }
+    for (let i = 0; i < (big ? 80 : 40); i++) { const b = document.createElement("span"); b.className = "party-confetti"; b.style.left = Math.random() * 100 + "%"; b.style.background = colors[i % colors.length]; b.style.setProperty("--drift", (Math.random() * 160 - 80) + "px"); el.appendChild(b); }
+    playSfx(big ? "fanfare" : "sparkle");
+    setTimeout(function () { el.replaceChildren(); }, big ? 4500 : 3000);
+  }
+
+  /* ---------- buddy ---------- */
+  const buddyEl = $("buddy"), buddyBubble = $("buddy-bubble");
+  const PRAISE = ["Page turned!", "Brilliant reading!", "The story loves you!", "Super reader!"];
+  const COMBO = ["Reading rocket!", "Nobody can stop this story!", "Combo reader!"];
+  const OOPS = ["Oops — reread that bit!", "Stories take patience!", "Almost — check the page again!"];
+  function pickLine(a) { return a[Math.floor(Math.random() * a.length)]; }
+  let buddyTimer = null;
+  function buddySay(text, mood) {
+    if (buddyBubble) buddyBubble.textContent = text;
+    if (!buddyEl) return;
+    buddyEl.classList.remove("cheer", "oops");
+    if (mood) { void buddyEl.offsetWidth; buddyEl.classList.add(mood); }
+    if (buddyTimer) clearTimeout(buddyTimer);
+    if (mood) buddyTimer = setTimeout(function () { buddyEl.classList.remove("cheer", "oops"); }, 950);
+  }
+
+  /* ---------- screens ---------- */
+  function show(screen) {
+    [gradeScreen, mapScreen, sceneScreen].forEach(function (s) { s.classList.add("hidden"); });
+    screen.classList.remove("hidden");
+  }
+
+  /* ---------- grade ---------- */
+  function renderGrade() {
+    const grid = $("grade-grid");
+    grid.replaceChildren();
+    (Content.GRADE_BANDS || []).forEach(function (band) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn grade-btn" + (profile.gradeBand === band.grade && profile.gradeBandSet ? " active" : "");
+      b.textContent = (band.label || ("Grade " + band.grade)) + (band.name ? " · " + band.name : "");
+      b.onclick = function () {
+        Engine.setGradeBand(profile, band.grade);
+        Engine.saveProfile(profile);
+        worldId = Engine.worldIdForGrade(profile.gradeBand || 1);
+        renderMap();
+      };
+      grid.appendChild(b);
+    });
+    show(gradeScreen);
+  }
+  $("change-grade").onclick = function () { renderGrade(); };
+
+  /* ---------- map ---------- */
+  function renderMap() {
+    profile = Engine.loadProfile();
+    const world = Content.getWorld(worldId);
+    if (!world) { renderGrade(); return; }
+    $("world-name").textContent = (world.icon ? world.icon + " " : "") + world.name;
+    $("world-focus").textContent = world.focus || "";
+    $("stat-xp").textContent = "✦ " + (profile.xp || 0) + " XP";
+    $("stat-stars").textContent = "★ " + (profile.stars || 0);
+    const nodes = Engine.getPathNodes(worldId);
+    const doneCount = Engine.countWorldNodesDone(profile, worldId);
+    $("stat-progress").textContent = doneCount + " / " + nodes.length + " chapters finished";
+    const path = $("path");
+    path.replaceChildren();
+    let currentMarked = false;
+    nodes.forEach(function (entry) {
+      const node = entry.node;
+      const key = worldId + ":" + node.id;
+      const done = !!profile.nodesCompleted[key];
+      const unlocked = Engine.nodeUnlocked(profile, worldId, node.id, entry.worldIndex, { pathStartIndex: 0 });
+      const isCurrent = unlocked && !done && !currentMarked;
+      if (isCurrent) currentMarked = true;
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "btn path-node" + (done ? " done" : isCurrent ? " current" : unlocked ? "" : " locked");
+      const dot = document.createElement("span");
+      dot.className = "node-dot";
+      dot.textContent = done ? "✓" : unlocked ? String(entry.worldIndex + 1) : "🔒";
+      const meta = document.createElement("span");
+      meta.className = "node-meta";
+      const nm = document.createElement("div");
+      nm.className = "node-name";
+      nm.textContent = node.name;
+      const sub = document.createElement("div");
+      sub.className = "node-sub";
+      const doneLessons = node.lessons.filter(function (l) { return profile.lessonsCompleted[key + ":" + l.id]; }).length;
+      sub.textContent = (node.blurb ? node.blurb + " · " : "") + doneLessons + "/" + node.lessons.length + " scenes read";
+      meta.appendChild(nm); meta.appendChild(sub);
+      row.appendChild(dot); row.appendChild(meta);
+      if (isCurrent) {
+        const tok = document.createElement("img");
+        tok.className = "hero-token";
+        tok.src = "assets/hub/player-hero.png";
+        tok.alt = "You are here";
+        row.appendChild(tok);
+      }
+      row.disabled = !unlocked;
+      if (unlocked) row.onclick = function () { playSfx("click"); openNode(node); };
+      path.appendChild(row);
+    });
+    show(mapScreen);
+  }
+
+  /* ---------- node lesson picker ---------- */
+  function openNode(node) {
+    $("lesson-title").textContent = node.name;
+    const list = $("lesson-list");
+    list.replaceChildren();
+    node.lessons.forEach(function (lesson) {
+      const done = !!profile.lessonsCompleted[worldId + ":" + node.id + ":" + lesson.id];
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn lesson-row";
+      const left = document.createElement("span");
+      left.textContent = (done ? "✓ " : "📖 ") + lesson.title;
+      const right = document.createElement("span");
+      right.className = "lr-meta";
+      const r = lesson.reward || { xp: 15, stars: 1 };
+      right.textContent = "+" + r.xp + " XP · ★" + r.stars;
+      b.appendChild(left); b.appendChild(right);
+      b.onclick = function () { $("lesson-overlay").classList.add("hidden"); startScene(node, lesson); };
+      list.appendChild(b);
+    });
+    $("lesson-overlay").classList.remove("hidden");
+  }
+  $("lesson-close").onclick = function () { $("lesson-overlay").classList.add("hidden"); };
+
+  /* ---------- scene ---------- */
+  const choicesEl = $("choices"), buildWrap = $("build-wrap"), sprintWrap = $("sprint-wrap");
+  let lastScene = null;
+  function act() { return scene ? scene.lesson.activities[scene.idx] : null; }
+  function shuffle(a) { const c = a.slice(); for (let i = c.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = c[i]; c[i] = c[j]; c[j] = t; } return c; }
+
+  function startScene(node, lesson) {
+    scene = { node: node, lesson: lesson, idx: 0, hearts: 3, streak: 0, points: 0, hintUsed: false, busy: false };
+    lastScene = { node: node, lesson: lesson };
+    built = [];
+    $("level-badge").textContent = node.name + " · " + lesson.title;
+    buddySay("A new page of the story — let's read!", null);
+    show(sceneScreen);
+    renderScene();
+  }
+
+  function renderHearts() { $("hearts").textContent = "💛".repeat(scene.hearts) + "🖤".repeat(Math.max(0, 3 - scene.hearts)); }
+  function renderPages() {
+    const row = $("page-row");
+    row.replaceChildren();
+    const total = scene.lesson.activities.length;
+    for (let i = 0; i < total; i++) { const p = document.createElement("span"); p.className = "page-pip" + (i < scene.idx ? " gone" : ""); row.appendChild(p); }
+  }
+  function renderCombo() {
+    const c = $("combo");
+    c.classList.toggle("hidden", scene.streak < 2);
+    if (scene.streak >= 2) { $("combo-label").textContent = "COMBO ×" + scene.streak; $("combo-fill").style.width = Math.min(100, 20 + scene.streak * 16) + "%"; }
+    $("streak").textContent = scene.streak >= 2 ? "Streak: " + scene.streak : "";
+  }
+
+  const KICKERS = { story: "Story time", sentence: "Finish the sentence", picture: "Picture words", build: "Build the word", sprint: "Quick read", sound: "Letter sounds", letter: "Letter hunt", action: "Your turn" };
+  function renderScene() {
+    const a = act();
+    if (!a) return;
+    renderHearts(); renderPages(); renderCombo();
+    $("score").textContent = "Score: " + scene.points;
+    scene.hintUsed = false;
+    $("hint").classList.add("hidden");
+    built = [];
+    $("scene-kicker").textContent = KICKERS[a.type] || "Reading challenge";
+    $("scene-question").textContent = "";
+    choicesEl.replaceChildren();
+    choicesEl.classList.remove("pic-grid");
+    buildWrap.classList.add("hidden");
+    sprintWrap.classList.add("hidden");
+
+    if (a.type === "story") {
+      $("scene-text").textContent = (a.payload && a.payload.text) || a.prompt;
+      $("scene-question").textContent = (a.payload && a.payload.question) || "";
+      renderOptions(a);
+    } else if (a.type === "picture") {
+      $("scene-text").textContent = "Tap the picture that matches: " + a.prompt;
+      choicesEl.classList.add("pic-grid");
+      (a.options || []).forEach(function (opt) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn choice-btn pic-card";
+        const em = document.createElement("span");
+        em.className = "pic-emoji";
+        em.textContent = opt.emoji || "❓";
+        const wd = document.createElement("span");
+        wd.textContent = opt.word;
+        b.appendChild(em); b.appendChild(wd);
+        b.onclick = function () { judge(opt.word); };
+        choicesEl.appendChild(b);
+      });
+    } else if (a.type === "build") {
+      $("scene-text").textContent = a.prompt;
+      buildWrap.classList.remove("hidden");
+      scene.tiles = shuffle(((a.payload && a.payload.letters) || String(a.answer || "").toUpperCase().split("")).slice());
+      renderBuild();
+    } else if (a.type === "sprint" || (a.type === "action" && !(a.options && a.options.length))) {
+      $("scene-text").textContent = a.type === "sprint" ? "Read this word out loud, then tap the button!" : (a.prompt || "Your turn!");
+      sprintWrap.classList.remove("hidden");
+      $("sprint-word").textContent = a.type === "sprint" ? a.prompt : "";
+      $("read-it").textContent = a.type === "sprint" ? "I read it!" : "Got it!";
+    } else {
+      $("scene-text").textContent = a.prompt;
+      renderOptions(a);
+    }
+  }
+  function renderOptions(a) {
+    (a.options || []).forEach(function (opt) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn choice-btn";
+      b.textContent = typeof opt === "object" ? (opt.word || opt.label || String(opt)) : opt;
+      b.onclick = function () { judge(typeof opt === "object" ? (opt.word || opt.label || opt) : opt); };
+      choicesEl.appendChild(b);
+    });
+  }
+  function renderBuild() {
+    const tray = $("build-tray");
+    tray.replaceChildren();
+    if (!built.length) {
+      const tip = document.createElement("span");
+      tip.className = "muted";
+      tip.textContent = "Tap letters below to build…";
+      tray.appendChild(tip);
+    } else {
+      built.forEach(function (ch, i) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "word-chip placed";
+        chip.textContent = ch;
+        chip.onclick = function () { if (!scene || scene.busy) return; built.splice(i, 1); renderBuild(); };
+        tray.appendChild(chip);
+      });
+    }
+    const chips = $("build-chips");
+    chips.replaceChildren();
+    scene.tiles.forEach(function (ch) {
+      const usedCount = built.filter(function (x) { return x === ch; }).length;
+      const total = scene.tiles.filter(function (x) { return x === ch; }).length;
+      if (usedCount >= total) return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn choice-btn word-chip";
+      b.textContent = ch;
+      b.onclick = function () { if (!scene || scene.busy) return; built.push(ch); renderBuild(); playSfx("click"); };
+      chips.appendChild(b);
+    });
+  }
+  $("check-build").onclick = function () { if (scene && built.length) judge(built.join("")); };
+  $("clear-build").onclick = function () { built = []; renderBuild(); };
+  $("read-it").onclick = function () { judge(true); };
+
+  function judge(value) {
+    if (!scene || scene.busy) return;
+    const a = act();
+    if (!a) return;
+    const result = Engine.evaluateActivity(a, value);
+    if (result.correct) {
+      scene.busy = true;
+      scene.streak++;
+      const gain = 10 + (scene.streak >= 3 ? 5 : 0);
+      scene.points += gain;
+      playSound("correct");
+      const book = $("book");
+      book.classList.remove("turn"); void book.offsetWidth; book.classList.add("turn");
+      const pop = document.createElement("span");
+      pop.className = "float-score"; pop.textContent = "+" + gain;
+      $("scene-wrap").appendChild(pop);
+      setTimeout(function () { pop.remove(); }, 950);
+      buddySay(scene.streak >= 3 ? pickLine(COMBO) : pickLine(PRAISE), "cheer");
+      scene.idx++;
+      renderHearts(); renderPages(); renderCombo();
+      $("score").textContent = "Score: " + scene.points;
+      setTimeout(function () {
+        if (!scene) return;
+        scene.busy = false;
+        if (scene.idx >= scene.lesson.activities.length) victory();
+        else renderScene();
+      }, 700);
+    } else {
+      scene.hearts--;
+      scene.streak = 0;
+      playSound("wrong");
+      buddySay(result.message + " " + pickLine(OOPS), "oops");
+      renderHearts(); renderCombo();
+      if (!scene.hintUsed) $("hint").classList.remove("hidden");
+      if (scene.hearts <= 0) {
+        scene.busy = true;
+        setTimeout(defeat, 900);
+      }
+    }
+  }
+
+  function victory() {
+    celebrate(true);
+    const lessonKey = worldId + ":" + scene.node.id + ":" + scene.lesson.id;
+    Engine.applyReward(profile, scene.lesson.reward, { lessonKey: lessonKey, streak: scene.streak });
+    const mastered = Engine.markNodeCompleteIfReady(profile, worldId, scene.node.id);
+    Engine.saveProfile(profile);
+    const r = scene.lesson.reward || { xp: 15, stars: 1 };
+    $("end-title").textContent = "Chapter complete!";
+    $("end-msg").textContent = "You finished " + scene.lesson.title + " with " + scene.points + " points! Reward: +" + r.xp + " XP and ★" + r.stars + "." + (mastered ? " You finished " + scene.node.name + " — the story path opens ahead!" : "");
+    $("end-retry").textContent = "Read again";
+    $("end-overlay").classList.remove("hidden");
+    scene = null;
+  }
+  function defeat() {
+    if (!scene) return;
+    $("end-title").textContent = "The story pauses here…";
+    $("end-msg").textContent = "Good reading, Explorer! Every great reader rereads. Rest up and try " + scene.lesson.title + " again.";
+    $("end-retry").textContent = "Try again";
+    $("end-overlay").classList.remove("hidden");
+    scene = null;
+  }
+  $("end-map").onclick = function () { $("end-overlay").classList.add("hidden"); renderMap(); };
+  $("end-retry").onclick = function () { $("end-overlay").classList.add("hidden"); if (lastScene) startScene(lastScene.node, lastScene.lesson); else renderMap(); };
+  $("quit-scene").onclick = function () { scene = null; renderMap(); };
+  $("speak").onclick = function () {
+    const a = act();
+    if (!a || !window.speechSynthesis) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(a.speak || a.prompt);
+    u.rate = 0.85; u.lang = "en-US";
+    speechSynthesis.speak(u);
+  };
+  $("hint").onclick = function () {
+    if (!scene) return;
+    scene.hintUsed = true;
+    $("hint").classList.add("hidden");
+    buddySay("Coach is thinking…", null);
+    const fallback = "Coach says: sound it out slowly, check the pictures, and reread the sentence!";
+    try {
+      if (window.ArcadeAI && typeof window.ArcadeAI.hint === "function") {
+        window.ArcadeAI.hint("reading", "stuck", profile, act()).then(function (res) {
+          buddySay(res && res.ok && res.message ? res.message : fallback, null);
+        }).catch(function () { buddySay(fallback, null); });
+      } else buddySay(fallback, null);
+    } catch (e) { buddySay(fallback, null); }
+  };
+
+  /* ---------- boot ---------- */
+  if (profile.gradeBandSet) {
+    worldId = Engine.worldIdForGrade(profile.gradeBand || 1);
+    renderMap();
+  } else {
+    renderGrade();
+  }
+})();
+  </script>
+</body>
+</html>

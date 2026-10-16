@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <title>Spell Caster — SpellBuzz Spelling World, by 103 Software Solutions LLC</title>
+  <link rel="icon" href="spellbuzz.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    /* Spell Caster: garden map + storm-sprite spelling duels over the SpellBuzz engine. */
+    .quest-hero { position: relative; border-radius: 16px; overflow: hidden; margin-bottom: .8rem; }
+    .quest-hero img.bg { width: 100%; height: 190px; object-fit: cover; display: block; }
+    .quest-hero .shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,20,14,.05), rgba(6,20,14,.78)); }
+    .quest-hero .hero-text { position: absolute; left: 1rem; right: 1rem; bottom: .7rem; color: #fff; }
+    .quest-hero h2 { margin: 0 0 .15rem; font-size: 1.45rem; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+    .quest-hero p { margin: 0; opacity: .92; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+    .quest-stats { display: flex; gap: .9rem; flex-wrap: wrap; margin: .4rem 0 .2rem; font-weight: 800; }
+    .quest-stats .xp { color: #ffd23f; } .quest-stats .stars { color: #ffe97a; }
+    .path { display: flex; flex-direction: column; gap: .55rem; margin-top: .6rem; }
+    .path-node { display: flex; align-items: center; gap: .7rem; text-align: left; width: 88%; }
+    .path-node:nth-child(even) { align-self: flex-end; flex-direction: row-reverse; text-align: right; }
+    .node-dot { flex: 0 0 auto; width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; font-weight: 900; background: #7a4d9e; color: #fff; border: 3px solid rgba(255,255,255,.35); position: relative; }
+    .path-node.done .node-dot { background: #2e9e5b; border-color: #b7ffc9; }
+    .path-node.current .node-dot { background: #ffb300; border-color: #fff2b0; color: #3a2700; animation: pulse 1.4s ease-in-out infinite; }
+    .path-node.locked { opacity: .45; }
+    .path-node .node-meta { min-width: 0; }
+    .path-node .node-name { font-weight: 900; font-size: 1.02rem; }
+    .path-node .node-sub { font-size: .82rem; opacity: .85; }
+    .hero-token { width: 44px; height: auto; filter: drop-shadow(0 3px 5px rgba(0,0,0,.5)); animation: buddyBob 2.6s ease-in-out infinite; }
+    .grade-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .5rem; margin-top: .6rem; }
+    /* Duel stage */
+    .stage { position: relative; border-radius: 16px; overflow: hidden; background: #241a3d; }
+    .stage img.bg { width: 100%; height: 250px; object-fit: cover; display: block; opacity: .92; }
+    .stage .shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(16,8,36,.10), rgba(16,8,36,.55)); }
+    .sprite-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: .8rem; }
+    .sprite { position: relative; width: 148px; height: 124px; border-radius: 50% 50% 46% 46%; background: radial-gradient(circle at 35% 30%, #cfc4ee, #6a5aa8 70%); box-shadow: inset -14px -18px 0 rgba(0,0,0,.22), 0 14px 24px rgba(0,0,0,.4); animation: buddyBob 3s ease-in-out infinite; }
+    .sprite .eye { position: absolute; top: 40px; width: 26px; height: 32px; background: #fff; border-radius: 50%; }
+    .sprite .eye:after { content: ""; position: absolute; left: 7px; top: 10px; width: 12px; height: 14px; background: #20242a; border-radius: 50%; }
+    .sprite .eye.l { left: 34px; } .sprite .eye.r { right: 34px; }
+    .sprite .mouth { position: absolute; left: 50%; bottom: 26px; width: 44px; height: 20px; margin-left: -22px; border: 4px solid rgba(20,20,30,.75); border-top: 0; border-left-color: transparent; border-right-color: transparent; border-radius: 0 0 44px 44px; }
+    .sprite.hit { animation: spriteHit .45s ease; }
+    .sprite.down { animation: none; transform: rotate(86deg) translateY(16px); opacity: .7; transition: transform .6s ease, opacity .6s ease; }
+    @keyframes spriteHit { 18% { transform: translateX(-10px) rotate(-5deg); filter: brightness(1.7); } 45% { transform: translateX(9px) rotate(4deg); } 70% { transform: translateX(-5px); } }
+    .hp-row { display: flex; gap: .3rem; margin-top: .55rem; }
+    .hp-pip { width: 22px; height: 10px; border-radius: 99px; background: #c39bff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+    .hp-pip.gone { background: rgba(255,255,255,.25); box-shadow: none; }
+    .sprite-name { color: #fff; font-weight: 900; text-shadow: 0 2px 6px rgba(0,0,0,.7); margin-top: .35rem; }
+    .prompt-bubble { background: #fff; color: #2c1a4d; border-radius: 16px; padding: .8rem 1rem; font-weight: 900; font-size: 1.4rem; text-align: center; margin: .7rem 0 .4rem; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+    .hearts { font-size: 1.15rem; letter-spacing: .15em; }
+    .lesson-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; width: 100%; margin: .3rem 0; text-align: left; }
+    .lesson-row .lr-meta { font-size: .82rem; opacity: .85; }
+    /* Buddy + combo (shared game-feel kit) */
+    .buddy { display: flex; align-items: flex-end; gap: .55rem; margin: .5rem 0 .15rem; }
+    .buddy img { height: 84px; width: auto; filter: drop-shadow(0 4px 6px rgba(0,0,0,.35)); animation: buddyBob 2.6s ease-in-out infinite; }
+    .buddy.cheer img { animation: buddyJump .55s ease; }
+    .buddy.oops img { animation: buddyNudge .4s ease; }
+    @keyframes buddyBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @keyframes buddyJump { 30% { transform: translateY(-16px) rotate(-3deg); } 65% { transform: translateY(0); } }
+    @keyframes buddyNudge { 25% { transform: translateX(-5px) rotate(-2deg); } 75% { transform: translateX(5px) rotate(2deg); } }
+    .bubble { background: #fff; color: #17341f; border-radius: 14px; padding: .45rem .7rem; font-weight: 700; line-height: 1.25; box-shadow: 0 3px 10px rgba(0,0,0,.25); position: relative; max-width: 78%; }
+    .bubble:after { content: ""; position: absolute; left: -7px; bottom: 14px; border: 8px solid transparent; border-right-color: #fff; border-left: 0; }
+    .combo { display: flex; align-items: center; gap: .5rem; margin: .3rem 0 .1rem; }
+    .combo > span { font-weight: 900; color: #ffd23f; text-shadow: 0 2px 0 rgba(0,0,0,.4); letter-spacing: .03em; white-space: nowrap; }
+    .combo-track { flex: 1; height: 10px; background: rgba(255,255,255,.18); border-radius: 99px; overflow: hidden; }
+    .combo-fill { height: 100%; width: 0; background: linear-gradient(90deg, #ffd23f, #ff7b00, #ff3d00); transition: width .3s ease; }
+    .float-score { position: absolute; top: 10px; right: 14px; font-weight: 900; font-size: 1.4rem; color: #ffdf3a; text-shadow: 0 2px 0 rgba(0,0,0,.5); animation: floatUp .9s ease-out forwards; pointer-events: none; z-index: 3; }
+    @media (prefers-reduced-motion: reduce) { .buddy img, .buddy.cheer img, .buddy.oops img, .sprite, .hero-token, .path-node.current .node-dot { animation: none; } .sprite.hit { animation-duration: .01s; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-row">
+          <img src="spellbuzz.svg" class="bee-mark" alt="">
+          <div>
+            <h1>Spell Caster</h1>
+            <p class="wq-sub">SpellBuzz · Spelling World</p>
+          </div>
+        </div>
+        <p class="byline">Built by 103 Software Solutions LLC</p>
+      </div>
+      <div class="topbar-actions">
+        <a class="btn secondary hub-link" href="index.html">103 Arcade</a>
+        <button id="mute" class="icon-btn" type="button" aria-label="Mute sounds" title="Mute sounds">🔊</button>
+      </div>
+    </div>
+
+    <section id="grade-screen" class="card hidden" aria-label="Choose grade">
+      <h2 style="margin-top:0;">Pick your spelling level</h2>
+      <p class="howto">Choose your grade to open your garden map. You can change it later in classic SpellBuzz.</p>
+      <div class="grade-grid" id="grade-grid"></div>
+    </section>
+
+    <section id="map-screen" class="card hidden" aria-label="Garden map">
+      <div class="quest-hero">
+        <img class="bg" src="assets/worlds/spelling/backgrounds/spelling-scene-master.webp" alt="">
+        <div class="shade"></div>
+        <div class="hero-text">
+          <h2 id="world-name">Spelling World</h2>
+          <p id="world-focus"></p>
+          <div class="quest-stats">
+            <span class="xp" id="stat-xp">✦ 0 XP</span>
+            <span class="stars" id="stat-stars">★ 0</span>
+            <span id="stat-progress"></span>
+          </div>
+        </div>
+      </div>
+      <p class="howto">Storm Sprites are rumbling over the garden, Explorer. Spell them away — clear each stop to calm the next!</p>
+      <div class="path" id="path"></div>
+      <div class="actions" style="margin-top:.8rem;">
+        <button id="change-grade" class="btn secondary" type="button">Change grade</button>
+        <a class="btn secondary" href="spellbuzz.html">Classic SpellBuzz (parents &amp; placement)</a>
+      </div>
+    </section>
+
+    <section id="duel-screen" class="card hidden" aria-label="Spelling duel">
+      <div class="hud">
+        <div class="score" id="score">Score: 0</div>
+        <div class="hearts" id="hearts"></div>
+      </div>
+      <div class="streak" id="streak"></div>
+      <div class="combo hidden" id="combo"><span id="combo-label">COMBO ×2</span><div class="combo-track"><div class="combo-fill" id="combo-fill"></div></div></div>
+      <div class="level-badge" id="level-badge">Duel</div>
+      <div class="stage" id="stage">
+        <img class="bg" src="assets/worlds/spelling/backgrounds/spelling-scene-master.webp" alt="">
+        <div class="shade"></div>
+        <div class="sprite-wrap">
+          <div class="sprite" id="sprite">
+            <div class="eye l"></div><div class="eye r"></div><div class="mouth"></div>
+          </div>
+          <div class="hp-row" id="hp-row"></div>
+          <div class="sprite-name" id="sprite-name">Storm Sprite</div>
+        </div>
+      </div>
+      <div class="buddy" id="buddy">
+        <img id="buddy-img" src="assets/hub/player-hero.png" alt="Your Explorer buddy">
+        <div class="bubble" id="buddy-bubble">Cast the right spelling to zap the sprite!</div>
+      </div>
+      <div class="prompt-bubble" id="prompt">?</div>
+      <div id="choices" class="choice-grid"></div>
+      <div id="build-wrap" class="hidden">
+        <div id="build-tray" class="sentence-tray" aria-live="polite"></div>
+        <div id="build-chips" class="choice-grid"></div>
+        <div class="actions">
+          <button id="cast" class="btn" type="button">Cast spell!</button>
+          <button id="clear-build" class="btn secondary" type="button">Clear</button>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="speak" class="btn secondary" type="button">Hear the word</button>
+        <button id="hint" class="btn secondary hidden" type="button">Ask coach for a hint</button>
+        <button id="quit-duel" class="btn secondary" type="button">Back to map</button>
+      </div>
+    </section>
+
+    <footer class="site-footer">
+      <img src="logo.png" alt="103 Software Solutions LLC">
+      <p>&copy; 2026 Spell Caster. Built by <strong>103 Software Solutions LLC</strong>. All Rights Reserved.</p>
+    </footer>
+  </div>
+
+  <div id="lesson-overlay" class="overlay hidden" role="dialog"><div class="overlay-card">
+    <h2 id="lesson-title"></h2>
+    <div id="lesson-list"></div>
+    <div class="actions"><button id="lesson-close" class="btn secondary" type="button">Close</button></div>
+  </div></div>
+
+  <div id="end-overlay" class="overlay hidden" role="dialog"><div class="overlay-card">
+    <h2 id="end-title"></h2><p id="end-msg"></p>
+    <div class="actions">
+      <button id="end-map" class="btn" type="button">Back to map</button>
+      <button id="end-retry" class="btn secondary" type="button">Duel again</button>
+    </div>
+  </div></div>
+
+  <div id="celebrate" aria-hidden="true"></div>
+  <audio id="snd-correct" src="sounds/correct.mp3" preload="auto"></audio>
+  <audio id="snd-wrong" src="sounds/wrong.mp3" preload="auto"></audio>
+
+  <script src="spellbuzz-content.js"></script>
+  <script src="spellbuzz-engine.js"></script>
+  <script src="arcade-ai.js"></script>
+  <script>
+(function () {
+  "use strict";
+  const Engine = window.SBEngine;
+  const Content = window.SBContent;
+  const $ = function (id) { return document.getElementById(id); };
+  const gradeScreen = $("grade-screen"), mapScreen = $("map-screen"), duelScreen = $("duel-screen");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  let profile = Engine.loadProfile();
+  let worldId = Engine.worldIdForGrade(profile.gradeBand || 1);
+  let duel = null;
+  let built = [];
+  let muted = localStorage.getItem("spellbee_mute") === "1";
+
+  /* ---------- sound (same kit as sibling games) ---------- */
+  let audioCtx = null;
+  function getCtx() { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; if (!audioCtx) audioCtx = new C(); if (audioCtx.state === "suspended") audioCtx.resume(); return audioCtx; }
+  function tone(f, d, t, g, s) { if (muted) return; try { const ctx = getCtx(); if (!ctx) return; const now = ctx.currentTime + (s || 0); const o = ctx.createOscillator(), gn = ctx.createGain(); o.type = t || "sine"; o.frequency.setValueAtTime(f, now); gn.gain.setValueAtTime(g || 0.07, now); gn.gain.exponentialRampToValueAtTime(0.001, now + d); o.connect(gn); gn.connect(ctx.destination); o.start(now); o.stop(now + d); } catch (e) {} }
+  function playMp3(id, v) { if (muted) return; const el = $(id); try { el.volume = v == null ? 1 : v; el.currentTime = 0; const p = el.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {} }
+  function playSfx(k) { if (muted) return; if (k === "click") tone(880, 0.05, "triangle", 0.05); else if (k === "sparkle") { tone(784, 0.1, "sine", 0.06); tone(1174, 0.16, "sine", 0.07, 0.1); } else if (k === "fanfare") { tone(523, 0.12, "square", 0.05); tone(784, 0.2, "square", 0.05, 0.14); } else if (k === "zap") { tone(880, 0.08, "sawtooth", 0.05); tone(220, 0.14, "sawtooth", 0.05, 0.05); } }
+  function playSound(n) { if (n === "correct") { playMp3("snd-correct", 0.85); playSfx("zap"); if (duel && duel.streak >= 3) playSfx("sparkle"); } else if (n === "wrong") { playMp3("snd-wrong", 0.45); tone(140, 0.2, "sawtooth", 0.05); } }
+  const muteBtn = $("mute");
+  function updateMuteUi() { muteBtn.textContent = muted ? "🔇" : "🔊"; }
+  muteBtn.onclick = function () { muted = !muted; localStorage.setItem("spellbee_mute", muted ? "1" : "0"); updateMuteUi(); };
+  updateMuteUi();
+
+  function celebrate(big) {
+    if (reduceMotion) return;
+    const colors = ["#ff8c00", "#ffff00", "#32cd32", "#00ffff", "#ff00ff"];
+    const el = $("celebrate");
+    el.replaceChildren();
+    for (let i = 0; i < (big ? 16 : 10); i++) { const r = document.createElement("span"); r.className = "streamer"; r.style.left = (4 + i * 6) + "%"; r.style.height = 40 + Math.random() * 24 + "vh"; r.style.background = "linear-gradient(180deg," + colors[i % colors.length] + ",transparent)"; el.appendChild(r); }
+    for (let i = 0; i < (big ? 80 : 40); i++) { const b = document.createElement("span"); b.className = "party-confetti"; b.style.left = Math.random() * 100 + "%"; b.style.background = colors[i % colors.length]; b.style.setProperty("--drift", (Math.random() * 160 - 80) + "px"); el.appendChild(b); }
+    playSfx(big ? "fanfare" : "sparkle");
+    setTimeout(function () { el.replaceChildren(); }, big ? 4500 : 3000);
+  }
+
+  /* ---------- buddy ---------- */
+  const buddyEl = $("buddy"), buddyBubble = $("buddy-bubble");
+  const PRAISE = ["Zap! Direct hit!", "The garden blooms!", "Spell power!", "The sprite is shrinking!"];
+  const COMBO = ["Casting combo!", "Storm can't touch you!", "Magic mastery!"];
+  const OOPS = ["Fizzle! Try another casting!", "The storm pushed back!", "Almost — listen to the sounds!"];
+  function pickLine(a) { return a[Math.floor(Math.random() * a.length)]; }
+  let buddyTimer = null;
+  function buddySay(text, mood) {
+    if (buddyBubble) buddyBubble.textContent = text;
+    if (!buddyEl) return;
+    buddyEl.classList.remove("cheer", "oops");
+    if (mood) { void buddyEl.offsetWidth; buddyEl.classList.add(mood); }
+    if (buddyTimer) clearTimeout(buddyTimer);
+    if (mood) buddyTimer = setTimeout(function () { buddyEl.classList.remove("cheer", "oops"); }, 950);
+  }
+
+  /* ---------- screens ---------- */
+  function show(screen) {
+    [gradeScreen, mapScreen, duelScreen].forEach(function (s) { s.classList.add("hidden"); });
+    screen.classList.remove("hidden");
+  }
+
+  /* ---------- grade ---------- */
+  function renderGrade() {
+    const grid = $("grade-grid");
+    grid.replaceChildren();
+    (Content.GRADE_BANDS || []).forEach(function (band) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn grade-btn" + (profile.gradeBand === band.grade && profile.gradeBandSet ? " active" : "");
+      b.textContent = (band.label || ("Grade " + band.grade)) + (band.name ? " · " + band.name : "");
+      b.onclick = function () {
+        Engine.setGradeBand(profile, band.grade);
+        Engine.saveProfile(profile);
+        worldId = Engine.worldIdForGrade(profile.gradeBand || 1);
+        renderMap();
+      };
+      grid.appendChild(b);
+    });
+    show(gradeScreen);
+  }
+  $("change-grade").onclick = function () { renderGrade(); };
+
+  /* ---------- map ---------- */
+  function renderMap() {
+    profile = Engine.loadProfile();
+    const world = Content.getWorld(worldId);
+    if (!world) { renderGrade(); return; }
+    $("world-name").textContent = (world.icon ? world.icon + " " : "") + world.name;
+    $("world-focus").textContent = world.focus || "";
+    $("stat-xp").textContent = "✦ " + (profile.xp || 0) + " XP";
+    $("stat-stars").textContent = "★ " + (profile.stars || 0);
+    const nodes = Engine.getPathNodes(worldId);
+    const doneCount = Engine.countWorldNodesDone(profile, worldId);
+    $("stat-progress").textContent = doneCount + " / " + nodes.length + " stops calmed";
+    const path = $("path");
+    path.replaceChildren();
+    let currentMarked = false;
+    nodes.forEach(function (entry) {
+      const node = entry.node;
+      const key = worldId + ":" + node.id;
+      const done = !!profile.nodesCompleted[key];
+      const unlocked = Engine.nodeUnlocked(profile, worldId, node.id, entry.worldIndex, { pathStartIndex: 0 });
+      const isCurrent = unlocked && !done && !currentMarked;
+      if (isCurrent) currentMarked = true;
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "btn path-node" + (done ? " done" : isCurrent ? " current" : unlocked ? "" : " locked");
+      const dot = document.createElement("span");
+      dot.className = "node-dot";
+      dot.textContent = done ? "✓" : unlocked ? String(entry.worldIndex + 1) : "🔒";
+      const meta = document.createElement("span");
+      meta.className = "node-meta";
+      const nm = document.createElement("div");
+      nm.className = "node-name";
+      nm.textContent = node.name;
+      const sub = document.createElement("div");
+      sub.className = "node-sub";
+      const doneLessons = node.lessons.filter(function (l) { return profile.lessonsCompleted[key + ":" + l.id]; }).length;
+      sub.textContent = (node.blurb ? node.blurb + " · " : "") + doneLessons + "/" + node.lessons.length + " duels won";
+      meta.appendChild(nm); meta.appendChild(sub);
+      row.appendChild(dot); row.appendChild(meta);
+      if (isCurrent) {
+        const tok = document.createElement("img");
+        tok.className = "hero-token";
+        tok.src = "assets/hub/player-hero.png";
+        tok.alt = "You are here";
+        row.appendChild(tok);
+      }
+      row.disabled = !unlocked;
+      if (unlocked) row.onclick = function () { playSfx("click"); openNode(node); };
+      path.appendChild(row);
+    });
+    show(mapScreen);
+  }
+
+  /* ---------- node lesson picker ---------- */
+  function openNode(node) {
+    $("lesson-title").textContent = node.name;
+    const list = $("lesson-list");
+    list.replaceChildren();
+    node.lessons.forEach(function (lesson) {
+      const done = !!profile.lessonsCompleted[worldId + ":" + node.id + ":" + lesson.id];
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn lesson-row";
+      const left = document.createElement("span");
+      left.textContent = (done ? "✓ " : "🪄 ") + lesson.title;
+      const right = document.createElement("span");
+      right.className = "lr-meta";
+      const r = lesson.reward || { xp: 15, stars: 1 };
+      right.textContent = "+" + r.xp + " XP · ★" + r.stars;
+      b.appendChild(left); b.appendChild(right);
+      b.onclick = function () { $("lesson-overlay").classList.add("hidden"); startDuel(node, lesson); };
+      list.appendChild(b);
+    });
+    $("lesson-overlay").classList.remove("hidden");
+  }
+  $("lesson-close").onclick = function () { $("lesson-overlay").classList.add("hidden"); };
+
+  /* ---------- duel ---------- */
+  const spriteEl = $("sprite"), hpRow = $("hp-row"), promptEl = $("prompt"), choicesEl = $("choices"), buildWrap = $("build-wrap");
+  let lastDuel = null;
+  function act() { return duel ? duel.lesson.activities[duel.idx] : null; }
+  function shuffle(a) { const c = a.slice(); for (let i = c.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = c[i]; c[i] = c[j]; c[j] = t; } return c; }
+  function speak(text) {
+    if (!text || !window.speechSynthesis) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.82; u.lang = "en-US";
+    speechSynthesis.speak(u);
+  }
+
+  function startDuel(node, lesson) {
+    duel = { node: node, lesson: lesson, idx: 0, hearts: 3, streak: 0, points: 0, hintUsed: false, busy: false };
+    lastDuel = { node: node, lesson: lesson };
+    built = [];
+    $("level-badge").textContent = node.name + " · " + lesson.title;
+    $("sprite-name").textContent = "Storm Sprite of " + node.name;
+    spriteEl.classList.remove("down");
+    buddySay("Cast the right spelling to zap the sprite!", null);
+    show(duelScreen);
+    renderDuel();
+  }
+
+  function renderHearts() { $("hearts").textContent = "💛".repeat(duel.hearts) + "🖤".repeat(Math.max(0, 3 - duel.hearts)); }
+  function renderHp() {
+    hpRow.replaceChildren();
+    const total = duel.lesson.activities.length;
+    for (let i = 0; i < total; i++) { const p = document.createElement("span"); p.className = "hp-pip" + (i < duel.idx ? " gone" : ""); hpRow.appendChild(p); }
+  }
+  function renderCombo() {
+    const c = $("combo");
+    c.classList.toggle("hidden", duel.streak < 2);
+    if (duel.streak >= 2) { $("combo-label").textContent = "COMBO ×" + duel.streak; $("combo-fill").style.width = Math.min(100, 20 + duel.streak * 16) + "%"; }
+    $("streak").textContent = duel.streak >= 2 ? "Streak: " + duel.streak : "";
+  }
+
+  function renderDuel() {
+    const a = act();
+    if (!a) return;
+    renderHearts(); renderHp(); renderCombo();
+    $("score").textContent = "Score: " + duel.points;
+    duel.hintUsed = false;
+    $("hint").classList.add("hidden");
+    built = [];
+    choicesEl.replaceChildren();
+    buildWrap.classList.add("hidden");
+    promptEl.textContent = a.prompt;
+    if (a.type === "spell") {
+      buildWrap.classList.remove("hidden");
+      const word = String(a.answer || "").toUpperCase();
+      const inWord = {};
+      word.split("").forEach(function (ch) { inWord[ch] = true; });
+      const pool = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").filter(function (ch) { return !inWord[ch]; });
+      const distract = shuffle(pool).slice(0, word.length <= 3 ? 3 : 2);
+      duel.tiles = shuffle(word.split("").concat(distract));
+      renderBuild();
+      speak(a.speak || a.answer);
+    } else {
+      (a.options || []).forEach(function (opt) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn choice-btn";
+        b.textContent = typeof opt === "object" ? (opt.word || opt.label || String(opt)) : opt;
+        b.onclick = function () { judge(typeof opt === "object" ? (opt.word || opt.label || opt) : opt); };
+        choicesEl.appendChild(b);
+      });
+    }
+  }
+  function renderBuild() {
+    const tray = $("build-tray");
+    tray.replaceChildren();
+    if (!built.length) {
+      const tip = document.createElement("span");
+      tip.className = "muted";
+      tip.textContent = "Tap letters to build the word…";
+      tray.appendChild(tip);
+    } else {
+      built.forEach(function (ch, i) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "word-chip placed";
+        chip.textContent = ch;
+        chip.onclick = function () { if (!duel || duel.busy) return; built.splice(i, 1); renderBuild(); };
+        tray.appendChild(chip);
+      });
+    }
+    const chips = $("build-chips");
+    chips.replaceChildren();
+    duel.tiles.forEach(function (ch) {
+      const usedCount = built.filter(function (x) { return x === ch; }).length;
+      const total = duel.tiles.filter(function (x) { return x === ch; }).length;
+      if (usedCount >= total) return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn choice-btn word-chip";
+      b.textContent = ch;
+      b.onclick = function () { if (!duel || duel.busy) return; built.push(ch); renderBuild(); playSfx("click"); };
+      chips.appendChild(b);
+    });
+  }
+  $("cast").onclick = function () { if (duel && built.length) judge(built.join("")); };
+  $("clear-build").onclick = function () { built = []; renderBuild(); };
+  document.addEventListener("keydown", function (e) {
+    if (!duel || duelScreen.classList.contains("hidden")) return;
+    const a = act();
+    if (!a || a.type !== "spell") return;
+    if (/^[a-zA-Z]$/.test(e.key)) {
+      const ch = e.key.toUpperCase();
+      const usedCount = built.filter(function (x) { return x === ch; }).length;
+      const total = duel.tiles.filter(function (x) { return x === ch; }).length;
+      if (usedCount < total) { built.push(ch); renderBuild(); }
+    } else if (e.key === "Backspace") { built.pop(); renderBuild(); }
+    else if (e.key === "Enter") { if (built.length) judge(built.join("")); }
+  });
+
+  function judge(value) {
+    if (!duel || duel.busy) return;
+    const a = act();
+    if (!a) return;
+    const result = Engine.evaluateActivity(a, value);
+    if (result.correct) {
+      duel.busy = true;
+      duel.streak++;
+      const gain = 10 + (duel.streak >= 3 ? 5 : 0);
+      duel.points += gain;
+      playSound("correct");
+      spriteEl.classList.remove("hit"); void spriteEl.offsetWidth; spriteEl.classList.add("hit");
+      const pop = document.createElement("span");
+      pop.className = "float-score"; pop.textContent = "+" + gain;
+      $("stage").appendChild(pop);
+      setTimeout(function () { pop.remove(); }, 950);
+      buddySay(duel.streak >= 3 ? pickLine(COMBO) : pickLine(PRAISE), "cheer");
+      duel.idx++;
+      renderHearts(); renderHp(); renderCombo();
+      $("score").textContent = "Score: " + duel.points;
+      setTimeout(function () {
+        if (!duel) return;
+        duel.busy = false;
+        if (duel.idx >= duel.lesson.activities.length) victory();
+        else renderDuel();
+      }, 700);
+    } else {
+      duel.hearts--;
+      duel.streak = 0;
+      playSound("wrong");
+      buddySay(result.message + " " + pickLine(OOPS), "oops");
+      renderHearts(); renderCombo();
+      if (!duel.hintUsed) $("hint").classList.remove("hidden");
+      if (duel.hearts <= 0) {
+        duel.busy = true;
+        setTimeout(defeat, 900);
+      }
+    }
+  }
+
+  function victory() {
+    spriteEl.classList.add("down");
+    celebrate(true);
+    const lessonKey = worldId + ":" + duel.node.id + ":" + duel.lesson.id;
+    Engine.applyReward(profile, duel.lesson.reward, { lessonKey: lessonKey, streak: duel.streak });
+    const mastered = Engine.markNodeCompleteIfReady(profile, worldId, duel.node.id);
+    Engine.saveProfile(profile);
+    const r = duel.lesson.reward || { xp: 15, stars: 1 };
+    $("end-title").textContent = "Storm cleared!";
+    $("end-msg").textContent = "You won the duel of " + duel.lesson.title + " with " + duel.points + " points! Reward: +" + r.xp + " XP and ★" + r.stars + "." + (mastered ? " You calmed " + duel.node.name + " — the garden path opens ahead!" : "");
+    $("end-retry").textContent = "Duel again";
+    $("end-overlay").classList.remove("hidden");
+    duel = null;
+  }
+  function defeat() {
+    if (!duel) return;
+    $("end-title").textContent = "The storm rolls on…";
+    $("end-msg").textContent = "Strong casting, Explorer! Storm Sprites are stubborn — rest up and challenge " + duel.lesson.title + " again.";
+    $("end-retry").textContent = "Try again";
+    $("end-overlay").classList.remove("hidden");
+    duel = null;
+  }
+  $("end-map").onclick = function () { $("end-overlay").classList.add("hidden"); renderMap(); };
+  $("end-retry").onclick = function () { $("end-overlay").classList.add("hidden"); if (lastDuel) startDuel(lastDuel.node, lastDuel.lesson); else renderMap(); };
+  $("quit-duel").onclick = function () { duel = null; if (window.speechSynthesis) speechSynthesis.cancel(); renderMap(); };
+  $("speak").onclick = function () { const a = act(); if (a) speak(a.speak || a.prompt); };
+  $("hint").onclick = function () {
+    if (!duel) return;
+    duel.hintUsed = true;
+    $("hint").classList.add("hidden");
+    buddySay("Coach is thinking…", null);
+    const fallback = "Coach says: say the word slowly and listen to each sound, one letter at a time!";
+    try {
+      if (window.ArcadeAI && typeof window.ArcadeAI.hint === "function") {
+        window.ArcadeAI.hint("spelling", "stuck", profile, act()).then(function (res) {
+          buddySay(res && res.ok && res.message ? res.message : fallback, null);
+        }).catch(function () { buddySay(fallback, null); });
+      } else buddySay(fallback, null);
+    } catch (e) { buddySay(fallback, null); }
+  };
+
+  /* ---------- boot ---------- */
+  if (profile.gradeBandSet) {
+    worldId = Engine.worldIdForGrade(profile.gradeBand || 1);
+    renderMap();
+  } else {
+    renderGrade();
+  }
+})();
+  </script>
+</body>
+</html>
